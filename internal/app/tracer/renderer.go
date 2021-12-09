@@ -12,20 +12,22 @@ import (
 )
 
 type Ctx struct {
-	Id     int
-	scene  *scenes.Scene
-	canvas *canvas2.Canvas
-	camera camera2.Camera
-	rnd    *rand.Rand
+	Id      int
+	scene   *scenes.Scene
+	canvas  *canvas2.Canvas
+	camera  camera2.Camera
+	samples int
+	rnd     *rand.Rand
 }
 
-func NewCtx(id int, scene *scenes.Scene, canvas *canvas2.Canvas) *Ctx {
+func NewCtx(id int, scene *scenes.Scene, canvas *canvas2.Canvas, samples int) *Ctx {
 	return &Ctx{
-		Id:     id,
-		scene:  scene,
-		canvas: canvas,
-		camera: scene.Camera,
-		rnd:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		Id:      id,
+		scene:   scene,
+		canvas:  canvas,
+		camera:  scene.Camera,
+		samples: samples,
+		rnd:     rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -49,7 +51,8 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 	rayData := ocl.BuildRayBufferCL(rays)
 	sceneData := ocl.BuildSceneBufferCL(ctx.scene.Objects)
 
-	result := ocl.Trace(rayData, sceneData, width, height)
+	// Render the scene
+	result := ocl.Trace(rayData, sceneData, width, height, ctx.samples)
 
 	// result now contains RGBA values for each pixel,
 	j := 0

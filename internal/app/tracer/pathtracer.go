@@ -21,7 +21,7 @@ func Render(sceneFactory func() *scenes.Scene) {
 	canvas := canvas2.NewCanvas(cmd.Cfg.Width, cmd.Cfg.Height)
 
 	// Create the render contexts, one per worker
-	renderContext := NewCtx(0, sceneFactory(), canvas)
+	renderContext := NewCtx(0, sceneFactory(), canvas, cmd.Cfg.Samples)
 	renderContext.renderPixelPathTracer(cmd.Cfg.Width, cmd.Cfg.Height)
 
 	logrus.Infof("Finished in %v\n", time.Now().Sub(st))

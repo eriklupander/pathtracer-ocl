@@ -40,7 +40,7 @@ type CLObject struct {
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(rays []CLRay, objects []CLObject, width, height int) []float64 {
+func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float64 {
 	logrus.Infof("trace with %d rays and %d objects\n", len(rays), len(objects))
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
@@ -129,14 +129,14 @@ func Trace(rays []CLRay, objects []CLObject, width, height int) []float64 {
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, context, kernel, queue, workGroupSize)...)
+		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, context, kernel, queue, samples, workGroupSize)...)
 		logrus.Infof("%d/%d lines done in %v\n", y+batchSize, height, time.Since(st))
 	}
 
 	return results
 }
 
-func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, workGroupSize int) []float64 {
+func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize int) []float64 {
 	// 5. Time to start loading data into GPU memory
 
 	// 5.1 create OpenCL buffers (memory) for the pre-computed rays and scene objects.
@@ -195,7 +195,7 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 	}
 
 	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
-	if err := kernel.SetArgs(inputRays, inputObjects, uint32(len(objects)), output, seedNumbers); err != nil {
+	if err := kernel.SetArgs(inputRays, inputObjects, uint32(len(objects)), output, seedNumbers, uint32(samples)); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 

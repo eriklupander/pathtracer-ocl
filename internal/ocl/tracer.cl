@@ -1,5 +1,4 @@
 __constant double PI = 3.14159265359f;
-__constant unsigned int SAMPLE_COUNT = 2048;
 __constant unsigned int MAX_BOUNCES = 4;
 
 typedef struct tag_ray{
@@ -91,9 +90,10 @@ __kernel void trace(
    __global  object* objects,
    const unsigned int numObjects,
    __global double* output,
-   __global double* seedX)
+   __global double* seedX,
+   const unsigned int samples)
 {
-    double colorWeight = 1.0 / SAMPLE_COUNT;
+    double colorWeight = 1.0 / samples;
 
     int i = get_global_id(0);
     float fgi = float(seedX[i])/numObjects;
@@ -101,7 +101,7 @@ __kernel void trace(
 	    
     double4 colors = (double4)(0, 0, 0, 0);
 	
-    for (unsigned int samples = 0; samples < SAMPLE_COUNT;samples++) {
+    for (unsigned int n = 0; n < samples;n++) {
         // Each new sample needs to reset to original ray
         double4 rayOrigin =  rays[i].origin;
 	    double4 rayDirection = rays[i].direction;
@@ -227,7 +227,7 @@ __kernel void trace(
                 
                 // Prepare the outgoing ray (next bounce), reuse the original ray, just update
                 // its origin and direction.
-                rayDirection = randomVectorInHemisphere(normalFacing, fgi, b*3, samples*3);
+                rayDirection = randomVectorInHemisphere(normalFacing, fgi, b*3, n*3);
                 rayOrigin = overPoint;
 
                 // Calculate the cosine of the OUTGOING ray in relation to the surface normal.

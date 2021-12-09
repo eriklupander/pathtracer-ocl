@@ -15,7 +15,6 @@ func FromConfig() {
 	Cfg = &Config{
 		Width:   viper.GetInt("width"),
 		Height:  viper.GetInt("height"),
-		Workers: viper.GetInt("workers"),
 		Samples: viper.GetInt("samples"),
 	}
 }

@@ -12,7 +12,7 @@ func TestPathTracer_Render(t *testing.T) {
 	cmd.Cfg.Width = 1
 	cmd.Cfg.Height = 1
 	canvas := canvas.NewCanvas(1, 1)
-	testee := NewCtx(1, scenes.OCLScene()(), canvas)
+	testee := NewCtx(1, scenes.OCLScene()(), canvas, 1)
 
 	testee.renderPixelPathTracer(1, 1)
 }
