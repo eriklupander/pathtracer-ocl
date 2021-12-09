@@ -121,7 +121,6 @@ __kernel void trace(__global ray *rays, __global object *objects,
       unsigned int numIntersections = 0;
       for (unsigned int j = 0; j < numObjects; j++) {
         long objType = objects[j].type;
-        // printf("object type: %d\n", objType);
         //  translate our ray into object space by multiplying ray pos and dir
         //  with inverse object matrix
         double4 tRayOrigin = mul(objects[j].inverse, rayOrigin);
@@ -231,7 +230,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
         // Prepare the outgoing ray (next bounce), reuse the original ray, just
         // update its origin and direction.
         rayDirection =
-            randomVectorInHemisphere(normalFacing, fgi, b * 3, n * 3);
+            randomVectorInHemisphere(normalFacing, fgi, b, n);
         rayOrigin = overPoint;
 
         // Calculate the cosine of the OUTGOING ray in relation to the surface
@@ -243,11 +242,6 @@ __kernel void trace(__global ray *rays, __global object *objects,
         bounces[b] = bnce;
         actualBounces++;
       }
-      //  else {
-      //      printf("a ray did not intersect anything, number of bounces:
-      //      %d\n.", actualBounces); printf("the actual bounce: %f %f %f\n",
-      //      bounces[b].color.x, bounces[b].color.y, bounces[b].color.z);
-      // }
     }
 
     // ------------------------------------ //
@@ -262,7 +256,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
       // mask and the emission properties of the hit object.
       accumColor = accumColor + mask * bounces[x].emission;
 
-      // Update the mask by multiplying it with the hit object's color, i.e
+      // Update the mask by multiplying it with the hit object's color
       mask *= bounces[x].color;
 
       // perform cosine-weighted importance sampling by multiplying the mask
@@ -273,7 +267,9 @@ __kernel void trace(__global ray *rays, __global object *objects,
     // Finish this "sample" by adding the accumulated color to the total
     colors += accumColor;
   }
-
+  
+  // Finish the ray by multiplying each RGB component by its total fraction and
+  // store in the output bufer.
   output[i * 4] = colors.x * colorWeight;
   output[i * 4 + 1] = colors.y * colorWeight;
   output[i * 4 + 2] = colors.z * colorWeight;
