@@ -41,7 +41,7 @@ type CLObject struct {
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
 func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float64 {
-	logrus.Infof("trace with %d rays and %d objects\n", len(rays), len(objects))
+	logrus.Infof("trace with %d rays and %d objects", len(rays), len(objects))
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
 		logrus.Fatalf("Failed to get platforms: %+v", err)
@@ -55,7 +55,9 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 	if len(devices) == 0 {
 		logrus.Fatalf("GetDevices returned no devices")
 	}
-	deviceIndex := 0
+
+	// Use the "highest" device index, is usually the discrete GPU
+	deviceIndex := len(devices) - 1
 
 	if deviceIndex < 0 {
 		deviceIndex = 0
@@ -63,8 +65,10 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 	device := devices[deviceIndex] // 0 == CPU 1 == iGPU 2 == GPU
 	logrus.Infof("Using device %d %v", deviceIndex, devices[deviceIndex].Name())
 
-	// 1. Select a device to use. On my mac: 0 == CPU, 1 == Iris GPU, 2 == GeForce 750M GPU
-	// Use selected device to create an OpenCL context
+	// 1. Select a device to use.
+	//    On my mac           : 0 == CPU, 1 == Iris GPU, 2 == GeForce 750M GPU
+	//    On my windows AMD PC: 0 == Gefore RTX2080
+	//    Use selected device to create an OpenCL context
 	context, err := cl.CreateContext([]*cl.Device{device})
 	if err != nil {
 		logrus.Fatalf("CreateContext failed: %+v", err)
@@ -76,18 +80,14 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 		logrus.Fatalf("CreateCommandQueue failed: %+v", err)
 	}
 
-	// 3.0 Read kernel source from disk
-	//kernelBytes, err := ioutil.ReadFile("internal/ocl/tracer.cl")
-	//if err != nil {
-	//	logrus.Fatalf("reading kernel source failed: %+v", err)
-	//}
-	// 3.1 Create an OpenCL "program" from the source code.
+	// 3.0 Read kernel source from embedded .cl file and
+	//     create an OpenCL "program" from the source code.
 	program, err := context.CreateProgramWithSource([]string{kernelSource})
 	if err != nil {
 		logrus.Fatalf("CreateProgramWithSource failed: %+v", err)
 	}
 
-	// 3.2 Build the OpenCL program (compile it?)
+	// 3.2 Build the OpenCL program
 	if err := program.BuildProgram(nil, ""); err != nil {
 		logrus.Fatalf("BuildProgram failed: %+v", err)
 	}
@@ -103,34 +103,39 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 		_, err := kernel.ArgName(i)
 		if err == cl.ErrUnsupported {
 			logrus.Errorf("GetKernelArgInfo for arg: %d ErrUnsupported", i)
-			break
+			continue
 		} else if err != nil {
-			logrus.Errorf("GetKernelArgInfo for name failed: %+v", err)
-			break
+			logrus.Errorf("GetKernelArgInfo for arg: %d failed: %+v", i, err)
+			continue
 		}
 	}
 
-	// 0. Determine device's WorkGroup size. This is probably how many items the GPU can process at a time.
+	// 5. Determine device's WorkGroup size. This is probably how many items the GPU can process at a time.
 	workGroupSize, err := kernel.WorkGroupSize(device)
 	if err != nil {
 		logrus.Fatalf("WorkGroupSize failed: %+v", err)
 	}
 	logrus.Infof("Work group size: %d", workGroupSize)
+
+	// Make sure the WGS is never greater than the total number of items we're going to process
 	if workGroupSize > len(rays) {
 		workGroupSize = len(rays)
+	}
+	if len(rays)%workGroupSize != 0 {
+		logrus.Fatal("The number of rays must be a power of the WorkGroupSize")
 	}
 
 	// split work into batches in order to avoid kernels running for more than 10 seconds
 	// otherwise, the GPU driver will kill us.
 	results := make([]float64, 0)
-	batchSize := 8
+	batchSize := 64
 	if batchSize > len(rays) {
 		batchSize = len(rays)
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
 		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, context, kernel, queue, samples, workGroupSize)...)
-		logrus.Infof("%d/%d lines done in %v\n", y+batchSize, height, time.Since(st))
+		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results

@@ -96,9 +96,11 @@ __kernel void trace(__global ray *rays, __global object *objects,
   double colorWeight = 1.0 / samples;
 
   int i = get_global_id(0);
-  float fgi = float(seedX[i]) / numObjects;
+
+  float fgi = seedX[i] / numObjects;
 
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
+
   double4 colors = (double4)(0, 0, 0, 0);
 
   for (unsigned int n = 0; n < samples; n++) {
@@ -229,8 +231,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
 
         // Prepare the outgoing ray (next bounce), reuse the original ray, just
         // update its origin and direction.
-        rayDirection =
-            randomVectorInHemisphere(normalFacing, fgi, b, n);
+        rayDirection = randomVectorInHemisphere(normalFacing, fgi, b, n);
         rayOrigin = overPoint;
 
         // Calculate the cosine of the OUTGOING ray in relation to the surface
@@ -267,7 +268,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
     // Finish this "sample" by adding the accumulated color to the total
     colors += accumColor;
   }
-  
+
   // Finish the ray by multiplying each RGB component by its total fraction and
   // store in the output bufer.
   output[i * 4] = colors.x * colorWeight;
