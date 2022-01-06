@@ -33,7 +33,8 @@ typedef struct tag_bounce {
   // refractiveIndex float64
 } bounce;
 
-static float noise3D(float x, float y, float z) {
+// from https://stackoverflow.com/a/50665114
+inline static float noise3D(float x, float y, float z) {
   float ptr = 0.0f;
   return fract(sin(x * 112.9898f + y * 179.233f + z * 237.212f) * 43758.5453f,
                &ptr);
@@ -41,6 +42,7 @@ static float noise3D(float x, float y, float z) {
 
 // randomVectorInHemisphere is based on
 // https://raytracey.blogspot.com/2016/11/opencl-path-tracing-tutorial-2-path.html
+//
 // but adapted to use another rand function and double4 instead of float4. The
 // thing is that using this func for diffuse surfaces produces a good and
 // balanced result in the final image, while using the randomConeInHemisphere
@@ -72,14 +74,6 @@ inline double4 randomVectorInHemisphere(double4 normalVec, double x, double y,
 
 // mul multiplies the vec by the matrix, producing a new vector.
 inline double4 mul(double16 mat, double4 vec) {
-  // double4 result;
-  // for (unsigned int row = 0; row < 4; row++) {
-  //     double a = mat[(row*4)+0] * vec.x;
-  //     double b = mat[(row*4)+1] * vec.y;
-  //     double c = mat[(row*4)+2] * vec.z;
-  //     double d = mat[(row*4)+3] * vec.w;
-  //     result[row] = a + b + c + d;
-  // }
   double4 elem1 = mat.s0123 * vec;
   double4 elem2 = mat.s4567 * vec;
   double4 elem3 = mat.s89AB * vec;
@@ -94,7 +88,6 @@ __kernel void trace(__global ray *rays, __global object *objects,
                     const unsigned int numObjects, __global double *output,
                     __global double *seedX, const unsigned int samples) {
   double colorWeight = 1.0 / samples;
-
   int i = get_global_id(0);
 
   float fgi = seedX[i] / numObjects;
@@ -136,14 +129,12 @@ __kernel void trace(__global ray *rays, __global object *objects,
             intersections[j] = t;
             numIntersections++;
           }
-        }
-
-        if (objType == 1) { // SPHERE
+        } else if (objType == 1) { // SPHERE
           // this is a vector from the origin of the ray to the center of the
           // sphere at 0,0,0
           double4 vecToCenter = tRayOrigin - originPoint;
 
-          // This dot product is
+          // This dot product is always 1.0 if tRayDirection is normalized. Which it isn't.
           double a = dot(tRayDirection, tRayDirection);
 
           // Take the dot of the direction and the vector from ray origin to
@@ -204,7 +195,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
           objectNormal = localPoint - originPoint;
         }
         // Finish the normal vector by multiplying it back into world coord
-        // using the inverse transpose matrix
+        // using the inverse transpose matrix and then normalize it
         double4 normalVec = mul(obj.inverseTranspose, objectNormal);
         normalVec.w = 0.0; // set w to 0
         normalVec = normalize(normalVec);
@@ -217,26 +208,22 @@ __kernel void trace(__global ray *rays, __global object *objects,
         // The "inside" stuff from the old impl will be needed for refraction
         // later comps.Inside = false negate the normal if the normal if facing
         // away from the "eye"
-        double4 normalFacing; // = dot(eyeVector, normalVec) < 0 ? normalVec :
-                              // normalVec * (-1.0f);
         if (dot(eyeVector, normalVec) < 0.0) {
-          normalFacing = normalVec * -1.0;
-        } else {
-          normalFacing = normalVec;
+          normalVec = normalVec * -1.0;
         }
 
         // Compute the over point, with a slight offset along the normal, in
         // order to avoid self-intersection on the next bounce.
-        double4 overPoint = position + normalFacing * 0.0001;
+        double4 overPoint = position + normalVec * 0.0001;
 
         // Prepare the outgoing ray (next bounce), reuse the original ray, just
         // update its origin and direction.
-        rayDirection = randomVectorInHemisphere(normalFacing, fgi, b, n);
+        rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
         rayOrigin = overPoint;
 
         // Calculate the cosine of the OUTGOING ray in relation to the surface
         // normal.
-        double cosine = dot(rayDirection, normalFacing);
+        double cosine = dot(rayDirection, normalVec);
 
         // Finish this iteration by storing the bounce.
         bounce bnce = {position, cosine, obj.color, obj.emission};
@@ -263,6 +250,17 @@ __kernel void trace(__global ray *rays, __global object *objects,
       // perform cosine-weighted importance sampling by multiplying the mask
       // with the cosine
       mask *= bounces[x].cos;
+
+/*
+      if (i == 6397 && bounces[actualBounces-1].emission.x > 0.0) {
+        printf("bounce: %d ", x);
+        printf("accum: %f %f %f ", accumColor.x, accumColor.y, accumColor.z);
+        printf("mask: %f %f %f ", mask.x, mask.y, mask.z);
+        printf("cos: %f ", bounces[x].cos);
+        printf("color: %f %f %f ", bounces[x].color.x, bounces[x].color.y, bounces[x].color.z);
+        printf("emission: %f %f %f\n", bounces[x].emission.x, bounces[x].emission.y, bounces[x].emission.z);
+      }
+      */
     }
 
     // Finish this "sample" by adding the accumulated color to the total

@@ -1,6 +1,7 @@
 package tracer
 
 import (
+	"fmt"
 	"github.com/eriklupander/pathtracer-ocl/cmd"
 	canvas2 "github.com/eriklupander/pathtracer-ocl/internal/app/canvas"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
@@ -25,7 +26,7 @@ func Render(sceneFactory func() *scenes.Scene) {
 	renderContext.renderPixelPathTracer(cmd.Cfg.Width, cmd.Cfg.Height)
 
 	logrus.Infof("Finished in %v\n", time.Now().Sub(st))
-	writeImagePNG(canvas, "out.png")
+	writeImagePNG(canvas, fmt.Sprintf("out-%v-%vx%v.png", cmd.Cfg.Samples, cmd.Cfg.Width, cmd.Cfg.Height))
 }
 
 func writeImagePNG(canvas *canvas2.Canvas, filename string) {

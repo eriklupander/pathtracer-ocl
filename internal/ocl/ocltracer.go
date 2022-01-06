@@ -55,7 +55,6 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 	if len(devices) == 0 {
 		logrus.Fatalf("GetDevices returned no devices")
 	}
-
 	// Use the "highest" device index, is usually the discrete GPU
 	deviceIndex := len(devices) - 1
 
@@ -128,7 +127,7 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 	// split work into batches in order to avoid kernels running for more than 10 seconds
 	// otherwise, the GPU driver will kill us.
 	results := make([]float64, 0)
-	batchSize := 64
+	batchSize := 16
 	if batchSize > len(rays) {
 		batchSize = len(rays)
 	}
