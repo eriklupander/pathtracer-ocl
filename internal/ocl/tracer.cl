@@ -14,14 +14,18 @@ typedef struct __attribute__((packed)) tag_object {
   double4 emission;          // 32 bytes
   double refractiveIndex;    // 8 bytes
   long type;                 // 8 bytes
-  double4 padding1;          // 32 bytes
+  double minY;               // 8 bytes. Used for cylinders.
+  double maxY;               // 8 bytes. Used for cylinders.
+  double padding1;           // 8 bytes
   double padding2;           // 8 bytes
   double padding3;           // 8 bytes
+  double padding4;           // 8 bytes
 } object;
 
 typedef struct tag_intersection {
-  long objType;
+  unsigned int objectIndex;
   double t;
+  double t2;
 } intersection;
 
 typedef struct tag_bounce {
@@ -32,6 +36,39 @@ typedef struct tag_bounce {
   // diffuse         bool
   // refractiveIndex float64
 } bounce;
+
+inline bool checkCap(double4 origin, double4 direction, double t) {
+	double x = origin.x + t*direction.x;
+	double z = origin.z + t*direction.z;
+	return pow(x, 2) + pow(z, 2) <= 1.0;
+}
+
+inline double2 intersectCaps(double4 origin, double4 direction, object* obj) {
+	// !c.closed removed
+    if (fabs(direction.y) < 0.0001) {
+		return (double2)(0.0,0.0);
+	}
+
+    double2 retVal = (double2)(0.0,0.0);
+
+	// check for an intersection with the lower end cap by intersecting
+	// the ray with the plane at y=cyl.minimum
+	double t1 = (obj->minY - origin.y) / direction.y;
+	if (checkCap(origin, direction, t1)) {
+		//*xs = append(*xs, NewIntersection(t, c))
+        // TODO 
+        retVal.x = t1;
+	}
+
+	// check for an intersection with the upper end cap by intersecting
+	// the ray with the plane at y=cyl.maximum
+	double t2 = (obj->maxY - origin.y) / direction.y;
+	if (checkCap(origin, direction, t2)) {
+		//*xs = append(*xs, NewIntersection(t, c))
+        retVal.y = t2;
+	}
+    return retVal;
+}
 
 // from https://stackoverflow.com/a/50665114
 inline static float noise3D(float x, float y, float z) {
@@ -106,9 +143,10 @@ __kernel void trace(__global ray *rays, __global object *objects,
     // Each ray may bounce up to 5 times
     bounce bounces[5] = {};
     for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
+     // track up to 16 intersections per ray.
+      double intersections[8] = {0};  // t of an intersection
+      unsigned int xsObjects[8] = {0}; // index maps to each xs above, value to objects
 
-      // track up to 16 intersections per ray.
-      double intersections[16] = {0};
 
       // ----------------------------------------------------------
       // Loop through scene objects in order to find intersections
@@ -125,8 +163,8 @@ __kernel void trace(__global ray *rays, __global object *objects,
         if (objType == 0) { // intersect transformed ray with plane
           if (fabs(tRayDirection.y) > 0.0001) {
             double t = -tRayOrigin.y / tRayDirection.y;
-
-            intersections[j] = t;
+            intersections[numIntersections] = t;
+            xsObjects[numIntersections] = j;
             numIntersections++;
           }
         } else if (objType == 1) { // SPHERE
@@ -152,20 +190,77 @@ __kernel void trace(__global ray *rays, __global object *objects,
             double t1 = (-b - sqrt(discriminant)) / (2 * a);
             // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
             // when we do refraction
-            intersections[j] = t1;
+            intersections[numIntersections] = t1;
+            xsObjects[numIntersections] = j;
             numIntersections++;
           }
+        } else if (objType == 2) {
+            // Cylinder intersection
+            // double rdx2 = tRayDirection.x * tRayDirection.x;
+            // double rdz2 = tRayDirection.z * tRayDirection.z;
+
+            // double a = rdx2 + rdz2;
+            // if (fabs(a) < 0.0001) {
+            //     //c.intercectCaps(ray, xs)
+            //     continue;
+            // }
+
+            // double b = 2*tRayOrigin.x*tRayDirection.x + 2*tRayOrigin.z*tRayDirection.z;
+
+            // double rox2 = tRayOrigin.x * tRayOrigin.x;
+            // double roz2 = tRayOrigin.z * tRayOrigin.z;
+
+            // double c1 = rox2 + roz2 - 1;
+
+            // double disc = b*b - 4*a*c1;
+
+            // // ray does not intersect the cylinder
+            // if (disc < 0.0) {
+            //     continue;
+            // }
+
+            // double t0 = (-b - sqrt(disc)) / (2 * a);
+            // double t1 = (-b + sqrt(disc)) / (2 * a);
+
+            // double y0 = tRayOrigin.y + t0*tRayDirection.y;
+
+            // // BROKEN BELOW!!!
+            // if (y0 > objects[j].minY && y0 < objects[j].maxY) {
+            //     //*xs = append(*xs, NewIntersection(t0, c))
+            //     // add intersection
+            //     intersections[j] = t0;
+            //     numIntersections++;
+            // }
+
+            // double y1 = tRayOrigin.y + t1*tRayDirection.y;
+            // if (y1 > objects[j].minY && y1 < objects[j].maxY) {
+            //     //*xs = append(*xs, NewIntersection(t1, c))
+            //     // add intersection
+            //     intersections[j] = t1;
+            //     numIntersections++;
+            // }
+
+            // // TODO fix caps
+            // double2 caps = intersectCaps(tRayOrigin, tRayDirection, xs, &objects[j])
+            // if (caps.x > 0.0) {
+            //     intersections[j] = caps.x;
+            //     numIntersections++;
+            // }
+            // if (caps.y > 0.0) {
+            //     intersections[j] = caps.y;
+            //     numIntersections++;
+            // }
         }
       }
 
       // find lowest positive intersection index
       double lowestIntersectionT = 1024.0;
       int lowestIntersectionIndex = -1;
-      for (unsigned int x = 0; x < 16; x++) {
+      for (unsigned int x = 0; x < numIntersections; x++) {
         if (intersections[x] > 0.0001) {
           if (intersections[x] < lowestIntersectionT) {
             lowestIntersectionT = intersections[x];
-            lowestIntersectionIndex = x;
+            lowestIntersectionIndex = xsObjects[x];
           }
         }
       }
@@ -193,6 +288,17 @@ __kernel void trace(__global ray *rays, __global object *objects,
           // SPHERE always has its normal from sphere center outwards to the
           // world position.
           objectNormal = localPoint - originPoint;
+        } else if (obj.type == 2) {
+            // CYLINDER
+            // compute the square of the distance from the y axis
+            double dist = pow(localPoint.x, 2) + pow(localPoint.z, 2);
+            if (dist < 1 && localPoint.y >= obj.maxY - 0.0001) {
+                objectNormal = (double4)(0.0, 1.0, 0.0, 0.0);
+            } else if (dist < 1 && localPoint.y <= obj.minY + 0.0001) {
+                objectNormal = (double4)(0.0, -1.0, 0.0, 0.0);
+            } else {
+                objectNormal = (double4)(localPoint.x, 0.0, localPoint.z, 0.0);
+            }
         }
         // Finish the normal vector by multiplying it back into world coord
         // using the inverse transpose matrix and then normalize it

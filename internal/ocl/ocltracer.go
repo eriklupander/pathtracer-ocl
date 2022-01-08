@@ -35,7 +35,12 @@ type CLObject struct {
 	Emission         [4]float64
 	RefractiveIndex  float64
 	Type             int64
-	Padding          [6]int64
+	MinY             float64
+	MaxY             float64
+	Padding1         int64
+	Padding2         int64
+	Padding3         int64
+	Padding4         int64
 }
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
@@ -56,7 +61,7 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 		logrus.Fatalf("GetDevices returned no devices")
 	}
 	// Use the "highest" device index, is usually the discrete GPU
-	deviceIndex := len(devices) - 1
+	deviceIndex := 0 //len(devices) - 1
 
 	if deviceIndex < 0 {
 		deviceIndex = 0

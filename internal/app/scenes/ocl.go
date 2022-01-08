@@ -62,12 +62,20 @@ func OCLScene() func() *Scene {
 		//		middleSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
 		middleSphere.SetMaterial(material.NewGlass())
 
-		// middle sphere
+		// right sphere
 		rightSphere := shapes.NewSphere()
 		rightSphere.SetTransform(geom.Translate(0.25, -0.24, 0.1))
 		rightSphere.SetTransform(geom.Scale(0.16, 0.16, 0.16))
 		rightSphere.SetMaterial(material.NewDiffuse(0.57, 0.86, 1))
 		//middleSphere.SetMaterial(material.NewGlass())
+
+		// cylinder
+		cyl := shapes.NewCylinderMMC(0, 0.4, true)
+		cyl.SetTransform(geom.Translate(0, -0.1, -0.2))
+		cyl.SetTransform(geom.RotateY(math.Pi / 4))
+		cyl.SetTransform(geom.RotateZ(math.Pi / 2))
+		cyl.SetTransform(geom.Scale(0.1, 1, 0.1))
+		cyl.SetMaterial(material.NewDiffuse(0.92, 0.4, 0.8))
 
 		// lightsource
 		lightsource := shapes.NewSphere()
@@ -78,7 +86,7 @@ func OCLScene() func() *Scene {
 
 		return &Scene{
 			Camera:  cam,
-			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, lightsource},
+			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, lightsource},
 		}
 	}
 }
