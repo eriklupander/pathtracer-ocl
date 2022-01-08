@@ -144,8 +144,8 @@ __kernel void trace(__global ray *rays, __global object *objects,
     bounce bounces[5] = {};
     for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
      // track up to 16 intersections per ray.
-      double intersections[8] = {0};  // t of an intersection
-      unsigned int xsObjects[8] = {0}; // index maps to each xs above, value to objects
+      double intersections[16] = {0};  // t of an intersection
+      //unsigned int xsObjects[8] = {0}; // index maps to each xs above, value to objects
 
 
       // ----------------------------------------------------------
@@ -163,8 +163,8 @@ __kernel void trace(__global ray *rays, __global object *objects,
         if (objType == 0) { // intersect transformed ray with plane
           if (fabs(tRayDirection.y) > 0.0001) {
             double t = -tRayOrigin.y / tRayDirection.y;
-            intersections[numIntersections] = t;
-            xsObjects[numIntersections] = j;
+            intersections[j] = t;
+            //xsObjects[numIntersections] = j;
             numIntersections++;
           }
         } else if (objType == 1) { // SPHERE
@@ -190,8 +190,8 @@ __kernel void trace(__global ray *rays, __global object *objects,
             double t1 = (-b - sqrt(discriminant)) / (2 * a);
             // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
             // when we do refraction
-            intersections[numIntersections] = t1;
-            xsObjects[numIntersections] = j;
+            intersections[j] = t1;
+            //xsObjects[numIntersections] = j;
             numIntersections++;
           }
         } else if (objType == 2) {
@@ -256,11 +256,11 @@ __kernel void trace(__global ray *rays, __global object *objects,
       // find lowest positive intersection index
       double lowestIntersectionT = 1024.0;
       int lowestIntersectionIndex = -1;
-      for (unsigned int x = 0; x < numIntersections; x++) {
+      for (unsigned int x = 0; x < 16; x++) {
         if (intersections[x] > 0.0001) {
           if (intersections[x] < lowestIntersectionT) {
             lowestIntersectionT = intersections[x];
-            lowestIntersectionIndex = xsObjects[x];
+            lowestIntersectionIndex = x;
           }
         }
       }

@@ -61,7 +61,7 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 		logrus.Fatalf("GetDevices returned no devices")
 	}
 	// Use the "highest" device index, is usually the discrete GPU
-	deviceIndex := 0 //len(devices) - 1
+	deviceIndex := 2 //len(devices) - 1
 
 	if deviceIndex < 0 {
 		deviceIndex = 0
