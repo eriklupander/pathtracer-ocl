@@ -49,10 +49,10 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 	// a ray is a POINT 4xfloat64 and a DIRECTION 4xfloat64. So each ray can be treated as 8x*float64
 	// where the first 4 elements is the POINT and the last 4 is the DIRECTION.
 	rayData := ocl.BuildRayBufferCL(rays)
-	sceneData := ocl.BuildSceneBufferCL(ctx.scene.Objects)
+	objects, triangles := ocl.BuildSceneBufferCL(ctx.scene.Objects)
 
 	// Render the scene
-	result := ocl.Trace(rayData, sceneData, width, height, ctx.samples)
+	result := ocl.Trace(rayData, objects, triangles, width, height, ctx.samples)
 
 	// result now contains RGBA values for each pixel,
 	j := 0

@@ -88,6 +88,19 @@ func OCLScene() func() *Scene {
 		cube.SetTransform(geom.RotateZ(math.Pi / 2))
 		cube.SetMaterial(material.NewDiffuse(0.25, 0.25, 0.75))
 
+		// mesh
+		tri := shapes.NewTriangle(
+			geom.NewPoint(-0.1, -0.4, 0.3),
+			geom.NewPoint(0.1, -0.4, 0.3),
+			geom.NewPoint(0.0, -0.2, 0.3),
+		)
+		tri2 := shapes.NewTriangle(
+			geom.NewPoint(-0.1, 0, 0.3),
+			geom.NewPoint(0.1, 0, 0.3),
+			geom.NewPoint(0.0, -0.2, 0.3),
+		)
+		mesh := shapes.NewMeshTri([]*shapes.Triangle{tri, tri2})
+		mesh.SetTransform(geom.Translate(0, 0, -.5))
 		// lightsource
 		lightsource := shapes.NewSphere()
 		lightsource.SetTransform(geom.Translate(0, 1.36, 0))
@@ -97,7 +110,7 @@ func OCLScene() func() *Scene {
 
 		return &Scene{
 			Camera:  cam,
-			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, cube, lightsource},
+			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, cube, mesh, lightsource},
 		}
 	}
 }

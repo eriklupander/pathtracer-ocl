@@ -38,15 +38,26 @@ type CLObject struct {
 	MinY             float64
 	MaxY             float64
 	Reflectivity     float64
-	Padding2         int64
+	NumTriangles     int32
+	TrianglesOffset  int32
 	Padding3         int64
 	Padding4         int64
 }
 
+type CLTriangle struct {
+	P1      [4]float64  // 32 bytes
+	P2      [4]float64  // 32 bytes
+	P3      [4]float64  // 32 bytes
+	E1      [4]float64  // 32 bytes
+	E2      [4]float64  // 32 bytes
+	N       [4]float64  // 32 bytes
+	Padding [8]float64  // 64 bytes
+}
+
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float64 {
-	logrus.Infof("trace with %d rays and %d objects", len(rays), len(objects))
+func Trace(rays []CLRay, objects []CLObject, triangles []CLTriangle, width, height, samples int) []float64 {
+	logrus.Infof("trace with %d rays and %d objects and %d triangles", len(rays), len(objects), len(triangles))
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
 		logrus.Fatalf("Failed to get platforms: %+v", err)
@@ -138,14 +149,14 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, context, kernel, queue, samples, workGroupSize)...)
+		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, triangles, context, kernel, queue, samples, workGroupSize)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results
 }
 
-func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize int) []float64 {
+func computeBatch(rays []CLRay, objects []CLObject, triangles []CLTriangle, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize int) []float64 {
 	// 5. Time to start loading data into GPU memory
 
 	// 5.1 create OpenCL buffers (memory) for the pre-computed rays and scene objects.
@@ -153,15 +164,26 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 	// Remember - each float64 uses 8 bytes.
 	inputRays, err := context.CreateEmptyBuffer(cl.MemReadOnly, 64*len(rays))
 	if err != nil {
-		logrus.Fatalf("CreateBuffer failed for vectors input: %+v", err)
+		logrus.Fatalf("CreateBuffer failed for rays input: %+v", err)
 	}
 	defer inputRays.Release()
 
 	inputObjects, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(objects))
 	if err != nil {
-		logrus.Fatalf("CreateBuffer failed for vectors input: %+v", err)
+		logrus.Fatalf("CreateBuffer failed for objects input: %+v", err)
 	}
 	defer inputObjects.Release()
+
+	// Hack for handling scenes with no triangles. CreateEmptyBuffer barfs if size == 0
+	numTri := 1
+	if len(triangles) > 0 {
+		numTri = len(triangles)
+	}
+	inputTriangles, err := context.CreateEmptyBuffer(cl.MemReadOnly, 256*numTri)
+	if err != nil {
+		logrus.Fatalf("CreateBuffer failed for triangles input: %+v", err)
+	}
+	defer inputTriangles.Release()
 
 	seed := make([]float64, len(rays))
 	for i := 0; i < len(rays); i++ {
@@ -170,7 +192,7 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 
 	seedNumbers, err := context.CreateEmptyBuffer(cl.MemReadOnly, 8*len(seed))
 	if err != nil {
-		logrus.Fatalf("CreateBuffer failed for vectors input: %+v", err)
+		logrus.Fatalf("CreateBuffer failed seed input: %+v", err)
 	}
 	defer seedNumbers.Release()
 
@@ -188,23 +210,31 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 	rayDataPtr := unsafe.Pointer(&rays[0])
 	rayDataTotalSizeBytes := int(unsafe.Sizeof(rays[0])) * len(rays)
 	if _, err := queue.EnqueueWriteBuffer(inputRays, true, 0, rayDataTotalSizeBytes, rayDataPtr, nil); err != nil {
-		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+		logrus.Fatalf("EnqueueWriteBuffer for rays failed: %+v", err)
 	}
 
 	dataPtrVec2 := unsafe.Pointer(&objects[0])
 	dataSizeVec2 := int(unsafe.Sizeof(objects[0])) * len(objects)
 	if _, err := queue.EnqueueWriteBuffer(inputObjects, true, 0, dataSizeVec2, dataPtrVec2, nil); err != nil {
-		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+		logrus.Fatalf("EnqueueWriteBufferfor objects failed: %+v", err)
 	}
 
-	dataPtrVec3 := unsafe.Pointer(&seed[0])
-	dataSizeVec3 := int(unsafe.Sizeof(seed[0])) * len(seed)
-	if _, err := queue.EnqueueWriteBuffer(seedNumbers, true, 0, dataSizeVec3, dataPtrVec3, nil); err != nil {
-		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+	if len(triangles) > 0 {
+		dataPtrVec3 := unsafe.Pointer(&triangles[0])
+		dataSizeVec3 := int(unsafe.Sizeof(triangles[0])) * len(triangles)
+		if _, err := queue.EnqueueWriteBuffer(inputTriangles, true, 0, dataSizeVec3, dataPtrVec3, nil); err != nil {
+			logrus.Fatalf("EnqueueWriteBuffer for triangles failed: %+v", err)
+		}
+	}
+
+	dataPtrVec4 := unsafe.Pointer(&seed[0])
+	dataSizeVec4 := int(unsafe.Sizeof(seed[0])) * len(seed)
+	if _, err := queue.EnqueueWriteBuffer(seedNumbers, true, 0, dataSizeVec4, dataPtrVec4, nil); err != nil {
+		logrus.Fatalf("EnqueueWriteBuffer for seed failed: %+v", err)
 	}
 
 	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
-	if err := kernel.SetArgs(inputRays, inputObjects, uint32(len(objects)), output, seedNumbers, uint32(samples)); err != nil {
+	if err := kernel.SetArgs(inputRays, inputObjects, uint32(len(objects)), inputTriangles, output, seedNumbers, uint32(samples)); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 

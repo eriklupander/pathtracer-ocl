@@ -50,8 +50,10 @@ import (
 //	return objs
 //}
 
-func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
+func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle) {
 	objs := make([]CLObject, 0)
+	triangles := make([]CLTriangle, 0)
+	trianglesOffset := 0
 	for i := range in {
 		obj := CLObject{}
 		obj.Transform = in[i].GetTransform()
@@ -72,16 +74,32 @@ func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
 			obj.MaxY = in[i].(*shapes.Cylinder).MaxY
 		case *shapes.Cube:
 			obj.Type = 3
+		case *shapes.Mesh:
+			obj.Type = 4
+			obj.NumTriangles = int32(len(in[i].(*shapes.Mesh).Triangles))
+			obj.TrianglesOffset = int32(trianglesOffset)
+			for j := range in[i].(*shapes.Mesh).Triangles {
+				tri := in[i].(*shapes.Mesh).Triangles[j]
+				triangles = append(triangles, CLTriangle{
+					P1: tri.P1,
+					P2: tri.P2,
+					P3: tri.P3,
+					E1: tri.E1,
+					E2: tri.E2,
+					N:  tri.N,
+				})
+			}
+			trianglesOffset = trianglesOffset + len(triangles)
 		default:
 			obj.Type = 999
 		}
 		// finally, pad with 32 bytes
 		obj.Reflectivity = in[i].GetMaterial().Reflectivity
-		obj.Padding2 = 0
+
 		obj.Padding3 = 0
 		obj.Padding4 = 0
 
 		objs = append(objs, obj)
 	}
-	return objs
+	return objs, triangles
 }

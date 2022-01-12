@@ -17,10 +17,22 @@ typedef struct __attribute__((packed)) tag_object {
   double minY;               // 8 bytes. Used for cylinders.
   double maxY;               // 8 bytes. Used for cylinders.
   double reflectivity;       // 8 bytes
-  double padding2;           // 8 bytes
+  int numTriangles;          // 4 bytes. If > 0, we need to iterate over triangles when checking this object, starting at offset
+  int trianglesOffset;       // 4 bytes
   double padding3;           // 8 bytes
   double padding4;           // 8 bytes
 } object;
+
+typedef struct tag_triangle {
+
+    double4 p1;       // 32 bytes
+    double4 p2;       // 32 bytes
+    double4 p3;       // 32 bytes
+    double4 e1;       // 32 bytes
+    double4 e2;       // 32 bytes
+    double4 n;        // 32 bytes
+    double8 padding;  // 64 bytes
+} triangle;
 
 typedef struct tag_intersection {
   unsigned int objectIndex;
@@ -44,6 +56,7 @@ inline double minX(double a, double b, double c) {
     return min(min(a, b), c);
 }
 
+// check axis in local space
 inline double2 checkAxis(double origin, double direction) {
     double2 out = (double2){0,0};
     double tminNumerator = -1.0 - origin;
@@ -149,7 +162,7 @@ inline double4 mul(double16 mat, double4 vec) {
 }
 
 __kernel void trace(__global ray *rays, __global object *objects,
-                    const unsigned int numObjects, __global double *output,
+                    const unsigned int numObjects, __global triangle *triangles, __global double *output,
                     __global double *seedX, const unsigned int samples) {
   double colorWeight = 1.0 / samples;
   int i = get_global_id(0);
@@ -173,7 +186,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
      // track up to 16 intersections per ray.
       double intersections[8] = {0};  // t of an intersection
       unsigned int xsObjects[8] = {0}; // index maps to each xs above, value to objects
-
+      double4 xsTriangle[8] = {0,0,0,0};
 
       // ----------------------------------------------------------
       // Loop through scene objects in order to find intersections
@@ -299,10 +312,40 @@ __kernel void trace(__global ray *rays, __global object *objects,
             intersections[numIntersections] = tmax;
             xsObjects[numIntersections] = j;
             numIntersections++;
-        }
+        } else if (objType == 4) {
+            // Mesh type. Iterate over the mesh triangles starting at offset
+            for (unsigned int n = objects[j].trianglesOffset; n < objects[j].trianglesOffset + objects[j].numTriangles; n++) {
+                // intersect each triangle...
+                triangle tri = triangles[n];
+                double4 dirCrossE2 = cross(tRayDirection, tri.e2);
+                double determinant = dot(tri.e1, dirCrossE2);
+                if (fabs(determinant) < 0.0001) {
+                    continue;
+                }
+
+                // Triangle misses over P1-P3 edge
+                double f = 1.0 / determinant;
+                double4 p1ToOrigin = tRayOrigin - tri.p1;
+                double u = f * dot(p1ToOrigin, dirCrossE2);
+                if (u < 0 || u > 1) {
+                    continue;
+                }
+
+                double4 originCrossE1 = cross(p1ToOrigin, tri.e1);
+                double v = f * dot(tRayDirection, originCrossE1);
+                if (v < 0 || (u+v) > 1) {
+                    continue;
+                }
+                double tdist = f * dot(tri.e2, originCrossE1);
+                intersections[numIntersections] = tdist;
+                xsObjects[numIntersections] = j;
+                xsTriangle[numIntersections] = tri.n;
+                numIntersections++;
+            }
+         }
       }
 
-      // find lowest positive intersection index
+      // find lowest positive intersection index of objects
       double lowestIntersectionT = 1024.0;
       int lowestIntersectionIndex = -1;
       for (unsigned int x = 0; x < numIntersections; x++) {
@@ -361,6 +404,8 @@ __kernel void trace(__global ray *rays, __global object *objects,
             } else {
                 objectNormal = (double4) (0.0, 0.0, localPoint.z, 0.0);
             }
+        } else if (obj.type == 4) {
+            // we need to find the intersected triangles pre-computed normal i local space
         }
         // Finish the normal vector by multiplying it back into world coord
         // using the inverse transpose matrix and then normalize it
