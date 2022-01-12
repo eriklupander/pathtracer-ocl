@@ -16,7 +16,7 @@ typedef struct __attribute__((packed)) tag_object {
   long type;                 // 8 bytes
   double minY;               // 8 bytes. Used for cylinders.
   double maxY;               // 8 bytes. Used for cylinders.
-  double padding1;           // 8 bytes
+  double reflectivity;       // 8 bytes
   double padding2;           // 8 bytes
   double padding3;           // 8 bytes
   double padding4;           // 8 bytes
@@ -307,9 +307,9 @@ __kernel void trace(__global ray *rays, __global object *objects,
         normalVec = normalize(normalVec);
 
         // reflection vector  (add when we start doing reflective materials)
-        // double dotScalar = dot(rayDirection, normalVec);
-        // double4 norm = (normalVec * 2.0) * dotScalar;
-        // double4 reflectVec = rayDirection - norm;
+        //
+        //
+        //
 
         // The "inside" stuff from the old impl will be needed for refraction
         // later comps.Inside = false negate the normal if the normal if facing
@@ -324,7 +324,16 @@ __kernel void trace(__global ray *rays, __global object *objects,
 
         // Prepare the outgoing ray (next bounce), reuse the original ray, just
         // update its origin and direction.
-        rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
+        if (obj.reflectivity == 0.0 || noise3D(fgi, n, b) > obj.reflectivity) {
+            // Diffuse
+            rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
+        } else {
+            // Reflected, calculate reflection and set as rayDirection
+            double dotScalar = dot(rayDirection, normalVec);
+            double4 norm = (normalVec * 2.0) * dotScalar;
+            rayDirection = rayDirection - norm;
+        }
+
         rayOrigin = overPoint;
 
         // Calculate the cosine of the OUTGOING ray in relation to the surface

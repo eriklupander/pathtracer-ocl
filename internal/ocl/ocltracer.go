@@ -37,7 +37,7 @@ type CLObject struct {
 	Type             int64
 	MinY             float64
 	MaxY             float64
-	Padding1         int64
+	Reflectivity     float64
 	Padding2         int64
 	Padding3         int64
 	Padding4         int64

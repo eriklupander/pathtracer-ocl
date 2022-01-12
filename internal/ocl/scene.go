@@ -78,7 +78,7 @@ func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
 			obj.Type = 999
 		}
 		// finally, pad with 32 bytes
-		obj.Padding1 = 0
+		obj.Reflectivity = in[i].GetMaterial().Reflectivity
 		obj.Padding2 = 0
 		obj.Padding3 = 0
 		obj.Padding4 = 0

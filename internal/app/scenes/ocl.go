@@ -64,10 +64,13 @@ func OCLScene() func() *Scene {
 
 		// right sphere
 		rightSphere := shapes.NewSphere()
-		rightSphere.SetTransform(geom.Translate(0.25, -0.24, 0.1))
+		rightSphere.SetTransform(geom.Translate(0.25, -0.24, -0.15))
 		rightSphere.SetTransform(geom.Scale(0.16, 0.16, 0.16))
-		rightSphere.SetMaterial(material.NewDiffuse(0.57, 0.86, 1))
-		//middleSphere.SetMaterial(material.NewGlass())
+		//rightSphere.SetMaterial(material.NewDiffuse(0.57, 0.86, 1))
+		halfMirror := material.NewMirror()
+		halfMirror.Reflectivity = 0.8
+		halfMirror.Color = geom.NewColor(0.97, 0.97, 0.843)
+		rightSphere.SetMaterial(halfMirror)
 
 		// cylinder
 		cyl := shapes.NewCylinderMMC(0, 0.4, true)
