@@ -64,16 +64,14 @@ func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
 		switch in[i].(type) {
 		case *shapes.Plane:
 			obj.Type = 0
-			obj.MinY = 0.0
-			obj.MaxY = 0.0
 		case *shapes.Sphere:
 			obj.Type = 1
-			obj.MinY = 0.0
-			obj.MaxY = 0.0
 		case *shapes.Cylinder:
 			obj.Type = 2
 			obj.MinY = in[i].(*shapes.Cylinder).MinY
 			obj.MaxY = in[i].(*shapes.Cylinder).MaxY
+		case *shapes.Cube:
+			obj.Type = 3
 		default:
 			obj.Type = 999
 		}
@@ -87,54 +85,3 @@ func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
 	}
 	return objs
 }
-
-// BuildSceneBuffer32 maps shapes to a CLObject32 slice:
-// Transform:        4x4 float32, offset: 0
-// Inverse:          4x4 float32, offset: 8
-// InverseTranspose: 4x4 float32, offset: 16
-// Color:            4x float32, offset: 24
-// Emission:         4x float32, offset: 26
-// RefractiveIndex:  1x float32, offset: 28
-// Type:             1x Int64, offset: 29
-//func BuildSceneBuffer32(in []shapes.Shape) []CLObject32 {
-//	objs := make([]CLObject32, 0)
-//	for i := range in {
-//		obj := CLObject32{}
-//		obj.Transform = asFloat324x4(in[i].GetTransform())
-//		obj.Inverse = asFloat324x4(in[i].GetInverse())
-//		obj.InverseTranspose = asFloat324x4(in[i].GetInverseTranspose())
-//		obj.Color = asFloat321x4(in[i].GetMaterial().Color)
-//		obj.Emission = asFloat321x4(in[i].GetMaterial().Emission)
-//		obj.RefractiveIndex = float32(in[i].GetMaterial().RefractiveIndex)
-//
-//		switch in[i].(type) {
-//		case *shapes.Plane:
-//			obj.Type = 0
-//		case *shapes.Sphere:
-//			obj.Type = 1
-//		default:
-//			obj.Type = 999
-//		}
-//		// finally, pad with 24 bytes
-//		obj.Padding = [6]int32{0, 0, 0, 0, 0, 0}
-//
-//		objs = append(objs, obj)
-//	}
-//	return objs
-//}
-//
-//func asFloat324x4(mat geom.Mat4x4) [16]float32 {
-//	out := [16]float32{}
-//	for i := range mat {
-//		out[i] = float32(mat[i])
-//	}
-//	return out
-//}
-//
-//func asFloat321x4(vec geom.Tuple4) [4]float32 {
-//	out := [4]float32{}
-//	for i := range vec {
-//		out[i] = float32(vec[i])
-//	}
-//	return out
-//}

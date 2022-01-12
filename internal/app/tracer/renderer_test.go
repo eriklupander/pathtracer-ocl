@@ -33,6 +33,6 @@ func Test_ConvertToHex(t *testing.T) {
 		r := int(row[0] * 255)
 		g := int(row[1] * 255)
 		b := int(row[2] * 255)
-		fmt.Printf("%X%X%X\n", r,g,b)
+		fmt.Printf("%X%X%X\n", r, g, b)
 	}
 }

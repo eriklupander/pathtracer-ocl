@@ -64,7 +64,7 @@ func OCLScene() func() *Scene {
 
 		// right sphere
 		rightSphere := shapes.NewSphere()
-		rightSphere.SetTransform(geom.Translate(0.25, -0.24, -0.15))
+		rightSphere.SetTransform(geom.Translate(0.25, -0.24, 0.1))
 		rightSphere.SetTransform(geom.Scale(0.16, 0.16, 0.16))
 		//rightSphere.SetMaterial(material.NewDiffuse(0.57, 0.86, 1))
 		halfMirror := material.NewMirror()
@@ -80,6 +80,14 @@ func OCLScene() func() *Scene {
 		cyl.SetTransform(geom.Scale(0.1, 1, 0.1))
 		cyl.SetMaterial(material.NewDiffuse(0.92, 0.4, 0.8))
 
+		// cube
+		cube := shapes.NewCube()
+		cube.SetTransform(geom.Translate(-0.3, -0.375, -0.3))
+		cube.SetTransform(geom.Scale(0.1, 0.05, 0.04))
+		cube.SetTransform(geom.RotateY(math.Pi / 4))
+		cube.SetTransform(geom.RotateZ(math.Pi / 2))
+		cube.SetMaterial(material.NewDiffuse(0.25, 0.25, 0.75))
+
 		// lightsource
 		lightsource := shapes.NewSphere()
 		lightsource.SetTransform(geom.Translate(0, 1.36, 0))
@@ -89,7 +97,7 @@ func OCLScene() func() *Scene {
 
 		return &Scene{
 			Camera:  cam,
-			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, lightsource},
+			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, cube, lightsource},
 		}
 	}
 }

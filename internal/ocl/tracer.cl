@@ -37,6 +37,33 @@ typedef struct tag_bounce {
   // refractiveIndex float64
 } bounce;
 
+inline double maxX(double a, double b, double c) {
+    return max(max(a, b), c);
+}
+inline double minX(double a, double b, double c) {
+    return min(min(a, b), c);
+}
+
+inline double2 checkAxis(double origin, double direction) {
+    double2 out = (double2){0,0};
+    double tminNumerator = -1.0 - origin;
+    double tmaxNumerator = 1.0 - origin;
+    if (fabs(direction) >= 0.0001) {
+      out.x = tminNumerator / direction;
+      out.y = tmaxNumerator / direction;
+    } else {
+      out.x = tminNumerator * HUGE_VAL;
+      out.y = tmaxNumerator * HUGE_VAL;
+    }
+    if (out.x > out.y) {
+      // swap
+      double temp = out.x;
+      out.x = out.y;
+      out.y = temp;
+    }
+    return out;
+}
+
 inline bool checkCap(double4 origin, double4 direction, double t) {
 	double x = origin.x + t*direction.x;
 	double z = origin.z + t*direction.z;
@@ -250,6 +277,28 @@ __kernel void trace(__global ray *rays, __global object *objects,
             //     intersections[j] = caps.y;
             //     numIntersections++;
             // }
+        } else if (objType == 3) {
+            // There is supposed to be a way to optimize this for fewer checks by looking at early values.
+            double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x);
+            double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y);
+            double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z);
+
+            // Om det största av min-värdena är större än det minsta max-värdet.
+            double tmin = maxX(xt.x, yt.x, zt.x);
+            double tmax = minX(xt.y, yt.y, zt.y);
+            if (tmin > tmax) {
+                // No intersection
+                continue;
+            }
+
+            // assign interesections
+            intersections[numIntersections] = tmin;
+            xsObjects[numIntersections] = j;
+            numIntersections++;
+
+            intersections[numIntersections] = tmax;
+            xsObjects[numIntersections] = j;
+            numIntersections++;
         }
       }
 
@@ -299,6 +348,19 @@ __kernel void trace(__global ray *rays, __global object *objects,
             } else {
                 objectNormal = (double4)(localPoint.x, 0.0, localPoint.z, 0.0);
             }
+        } else if (obj.type == 3) {
+            // CUBE
+            // NormalAtLocal for a cube uses the fact that given a unit cube, the point of the surface axis X,Y or Z is
+            // always either 1.0 for positive XYZ and -1.0 for negative XYZ. I.e - if the point is 0.4, 1, -0.5,
+            // we know that the point is on the top Y surface and we can return a 0,1,0 normal.
+            double maxc = maxX(fabs(localPoint.x), fabs(localPoint.y), fabs(localPoint.z));
+            if (maxc == fabs(localPoint.x)) {
+                objectNormal = (double4)(localPoint.x, 0.0, 0.0, 0.0);
+            } else if (maxc == fabs(localPoint.y)) {
+                objectNormal = (double4) (0.0, localPoint.y, 0.0, 0.0);
+            } else {
+                objectNormal = (double4) (0.0, 0.0, localPoint.z, 0.0);
+            }
         }
         // Finish the normal vector by multiplying it back into world coord
         // using the inverse transpose matrix and then normalize it
@@ -306,13 +368,10 @@ __kernel void trace(__global ray *rays, __global object *objects,
         normalVec.w = 0.0; // set w to 0
         normalVec = normalize(normalVec);
 
-        // reflection vector  (add when we start doing reflective materials)
-        //
-        //
-        //
-
         // The "inside" stuff from the old impl will be needed for refraction
-        // later comps.Inside = false negate the normal if the normal if facing
+        // later comps.Inside = false
+
+        // negate the normal if the normal if facing
         // away from the "eye"
         if (dot(eyeVector, normalVec) < 0.0) {
           normalVec = normalVec * -1.0;
@@ -328,7 +387,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
             // Diffuse
             rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
         } else {
-            // Reflected, calculate reflection and set as rayDirection
+            // Reflected, calculate reflection vector and set as rayDirection
             double dotScalar = dot(rayDirection, normalVec);
             double4 norm = (normalVec * 2.0) * dotScalar;
             rayDirection = rayDirection - norm;
