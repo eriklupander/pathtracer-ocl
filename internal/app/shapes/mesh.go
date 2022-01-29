@@ -10,6 +10,27 @@ type Mesh struct {
 	Basic
 	Triangles []*Triangle
 }
+
+func (m *Mesh) IntersectLocal(ray geom.Ray) []Intersection {
+	panic("implement me")
+}
+
+func (m *Mesh) NormalAtLocal(point geom.Tuple4, intersection *Intersection) geom.Tuple4 {
+	panic("implement me")
+}
+
+func (m *Mesh) GetLocalRay() geom.Ray {
+	panic("implement me")
+}
+
+func (m *Mesh) CastsShadow() bool {
+	panic("implement me")
+}
+
+func (m *Mesh) Name() string {
+	panic("implement me")
+}
+
 func NewMeshTri(triangles []*Triangle) *Mesh {
 	mesh := NewMesh()
 	mesh.Triangles = triangles

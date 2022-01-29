@@ -35,29 +35,44 @@ type CLObject struct {
 	Emission         [4]float64
 	RefractiveIndex  float64
 	Type             int64
-	MinY             float64
-	MaxY             float64
+	MinY             float64 // used for cones and cylinders
+	MaxY             float64 // used for cones and cylinders
 	Reflectivity     float64
 	NumTriangles     int32
 	TrianglesOffset  int32
-	Padding3         int64
-	Padding4         int64
+	//Children         [2]int32 // 8 bytes
+	Padding3 int64
+	Padding4 int64
+	// 512 bytes here
+	CLBoundingBox
+	NumChildren int32      // 4 byte
+	Children    [111]int32 // 111*4 == 444
+	//CLBoundingBox           // 64 bytes totally for the bounding box
+	//Padding5      [56]int64 // 448 bytes padding
+}
+
+type CLBoundingBox struct {
+	Min [4]float64 // 32 bytes
+	Max [4]float64 // 32 bytes
 }
 
 type CLTriangle struct {
-	P1      [4]float64  // 32 bytes
-	P2      [4]float64  // 32 bytes
-	P3      [4]float64  // 32 bytes
-	E1      [4]float64  // 32 bytes
-	E2      [4]float64  // 32 bytes
-	N       [4]float64  // 32 bytes
-	Padding [8]float64  // 64 bytes
+	P1      [4]float64 // 32 bytes
+	P2      [4]float64 // 32 bytes
+	P3      [4]float64 // 32 bytes
+	E1      [4]float64 // 32 bytes
+	E2      [4]float64 // 32 bytes
+	N       [4]float64 // 32 bytes
+	Padding [8]float64 // 64 bytes
 }
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(rays []CLRay, objects []CLObject, triangles []CLTriangle, width, height, samples int) []float64 {
-	logrus.Infof("trace with %d rays and %d objects and %d triangles", len(rays), len(objects), len(triangles))
+func Trace(rays []CLRay, objects []CLObject, normalObjects int, triangles []CLTriangle, width, height, samples int) []float64 {
+	logrus.Infof("trace with %d rays and %d objects of which %d are main objects, and %d triangles", len(rays), len(objects), normalObjects, len(triangles))
+	logrus.Infof("CLRay size: %d bytes", unsafe.Sizeof(rays[0]))
+	logrus.Infof("CLObject size: %d bytes", unsafe.Sizeof(objects[0]))
+
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
 		logrus.Fatalf("Failed to get platforms: %+v", err)
@@ -149,14 +164,14 @@ func Trace(rays []CLRay, objects []CLObject, triangles []CLTriangle, width, heig
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, triangles, context, kernel, queue, samples, workGroupSize)...)
+		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, normalObjects, triangles, context, kernel, queue, samples, workGroupSize)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results
 }
 
-func computeBatch(rays []CLRay, objects []CLObject, triangles []CLTriangle, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize int) []float64 {
+func computeBatch(rays []CLRay, objects []CLObject, normalObjects int, triangles []CLTriangle, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize int) []float64 {
 	// 5. Time to start loading data into GPU memory
 
 	// 5.1 create OpenCL buffers (memory) for the pre-computed rays and scene objects.
@@ -168,7 +183,7 @@ func computeBatch(rays []CLRay, objects []CLObject, triangles []CLTriangle, cont
 	}
 	defer inputRays.Release()
 
-	inputObjects, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(objects))
+	inputObjects, err := context.CreateEmptyBuffer(cl.MemReadOnly, 1024*len(objects))
 	if err != nil {
 		logrus.Fatalf("CreateBuffer failed for objects input: %+v", err)
 	}
@@ -234,7 +249,7 @@ func computeBatch(rays []CLRay, objects []CLObject, triangles []CLTriangle, cont
 	}
 
 	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
-	if err := kernel.SetArgs(inputRays, inputObjects, uint32(len(objects)), inputTriangles, output, seedNumbers, uint32(samples)); err != nil {
+	if err := kernel.SetArgs(inputRays, inputObjects, uint32(normalObjects), inputTriangles, output, seedNumbers, uint32(samples)); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 

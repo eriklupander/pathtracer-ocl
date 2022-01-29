@@ -19,8 +19,14 @@ typedef struct __attribute__((packed)) tag_object {
   double reflectivity;       // 8 bytes
   int numTriangles;          // 4 bytes. If > 0, we need to iterate over triangles when checking this object, starting at offset
   int trianglesOffset;       // 4 bytes
-  double padding3;           // 8 bytes
+  int children[2];           // 8 bytes
   double padding4;           // 8 bytes
+  double4 bbMin;             // 32 bytes. Bounding box min
+  double4 bbMax;             // 32 bytes. Bounding box max
+  long8 padding5;           // 64 bytes
+  long16 padding6;          // 128 bytes
+  long16 padding7;          // 128 bytes
+  long16 padding8;          // 128 bytes
 } object;
 
 typedef struct tag_triangle {
@@ -164,9 +170,16 @@ inline double4 mul(double16 mat, double4 vec) {
 __kernel void trace(__global ray *rays, __global object *objects,
                     const unsigned int numObjects, __global triangle *triangles, __global double *output,
                     __global double *seedX, const unsigned int samples) {
+
+
   double colorWeight = 1.0 / samples;
   int i = get_global_id(0);
-
+  //if (i == 0) {
+  //  printf("left child:  %d\n", objects[8].children[0]);
+  //  printf("right child: %d\n", objects[8].children[1]);
+  //  printf("bbmin: %f %f %f\n", objects[8].bbMin.x, objects[8].bbMin.y, objects[8].bbMin.z);
+  //  printf("bbmax: %f %f %f\n", objects[8].bbMax.x, objects[8].bbMax.y, objects[8].bbMax.z);
+  //}
   float fgi = seedX[i] / numObjects;
 
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);

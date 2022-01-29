@@ -27,6 +27,26 @@ type Cube struct {
 	parent Shape
 }
 
+func (c *Cube) IntersectLocal(ray geom.Ray) []Intersection {
+	panic("implement me")
+}
+
+func (c *Cube) NormalAtLocal(point geom.Tuple4, intersection *Intersection) geom.Tuple4 {
+	panic("implement me")
+}
+
+func (c *Cube) GetLocalRay() geom.Ray {
+	panic("implement me")
+}
+
+func (c *Cube) CastsShadow() bool {
+	panic("implement me")
+}
+
+func (c *Cube) Name() string {
+	panic("implement me")
+}
+
 func (c *Cube) ID() int64 {
 	return c.Id
 }

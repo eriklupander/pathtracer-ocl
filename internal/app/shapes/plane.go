@@ -32,6 +32,26 @@ type Plane struct {
 	parent Shape
 }
 
+func (p *Plane) IntersectLocal(ray geom.Ray) []Intersection {
+	panic("implement me")
+}
+
+func (p *Plane) NormalAtLocal(point geom.Tuple4, intersection *Intersection) geom.Tuple4 {
+	panic("implement me")
+}
+
+func (p *Plane) GetLocalRay() geom.Ray {
+	panic("implement me")
+}
+
+func (p *Plane) CastsShadow() bool {
+	panic("implement me")
+}
+
+func (p *Plane) Name() string {
+	panic("implement me")
+}
+
 func (p *Plane) ID() int64 {
 	return p.Id
 }

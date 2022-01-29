@@ -33,6 +33,26 @@ type Sphere struct {
 	parent Shape
 }
 
+func (s *Sphere) IntersectLocal(ray geom.Ray) []Intersection {
+	panic("implement me")
+}
+
+func (s *Sphere) NormalAtLocal(point geom.Tuple4, intersection *Intersection) geom.Tuple4 {
+	panic("implement me")
+}
+
+func (s *Sphere) GetLocalRay() geom.Ray {
+	panic("implement me")
+}
+
+func (s *Sphere) CastsShadow() bool {
+	panic("implement me")
+}
+
+func (s *Sphere) Name() string {
+	panic("implement me")
+}
+
 func (s *Sphere) ID() int64 {
 	return s.Id
 }

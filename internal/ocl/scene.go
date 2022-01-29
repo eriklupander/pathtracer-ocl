@@ -1,6 +1,7 @@
 package ocl
 
 import (
+	"fmt"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/shapes"
 )
 
@@ -50,10 +51,16 @@ import (
 //	return objs
 //}
 
-func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle) {
+func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, int, []CLTriangle) {
 	objs := make([]CLObject, 0)
-	triangles := make([]CLTriangle, 0)
-	trianglesOffset := 0
+	gb := GroupBuilder{
+		groups:         make([]CLObject, 0),
+		triangles:      make([]CLTriangle, 0),
+		groupOffset:    -1,
+		triangleOffset: 0,
+	}
+
+	//trianglesOffset := 0
 	for i := range in {
 		obj := CLObject{}
 		obj.Transform = in[i].GetTransform()
@@ -74,22 +81,40 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle) {
 			obj.MaxY = in[i].(*shapes.Cylinder).MaxY
 		case *shapes.Cube:
 			obj.Type = 3
-		case *shapes.Mesh:
-			obj.Type = 4
-			obj.NumTriangles = int32(len(in[i].(*shapes.Mesh).Triangles))
-			obj.TrianglesOffset = int32(trianglesOffset)
-			for j := range in[i].(*shapes.Mesh).Triangles {
-				tri := in[i].(*shapes.Mesh).Triangles[j]
-				triangles = append(triangles, CLTriangle{
-					P1: tri.P1,
-					P2: tri.P2,
-					P3: tri.P3,
-					E1: tri.E1,
-					E2: tri.E2,
-					N:  tri.N,
-				})
-			}
-			trianglesOffset = trianglesOffset + len(triangles)
+		//case *shapes.Mesh:
+		//	obj.Type = 4
+		//	obj.NumTriangles = int32(len(in[i].(*shapes.Mesh).Triangles))
+		//	obj.TrianglesOffset = int32(trianglesOffset)
+		//	for j := range in[i].(*shapes.Mesh).Triangles {
+		//		tri := in[i].(*shapes.Mesh).Triangles[j]
+		//		triangles = append(triangles, CLTriangle{
+		//			P1: tri.P1,
+		//			P2: tri.P2,
+		//			P3: tri.P3,
+		//			E1: tri.E1,
+		//			E2: tri.E2,
+		//			N:  tri.N,
+		//		})
+		//	}
+		//	trianglesOffset = trianglesOffset + len(triangles)
+		case *shapes.Group:
+			obj.Type = 5
+			// only the root group goes into the objects list.
+			// the root group _may_ contain triangles
+			// the root group should have a bounding box
+			// sub groups indexed by "children" (left/right) must NOT be added to objects directly, they should go into a separate
+			// list that we can append to the final list, which will be > numObjects which means they can be accessed by index but
+			// won't be iterated over.
+
+			// this is slightly tricky. This "parent" should only have a single child indexing into the groups
+			gb.BuildCLGroup(in[i].(*shapes.Group))
+			firstChildIndex := gb.groupOffset
+			obj.NumChildren = 1
+			obj.Children[0] = firstChildIndex
+			fmt.Printf("first child index: %d\n", firstChildIndex)
+			fmt.Printf("number of flattened groups: %d\n", len(gb.groups))
+			fmt.Printf("number of triangles: %d\n", len(gb.triangles))
+			fmt.Printf("%+v\n", gb.groups[firstChildIndex])
 		default:
 			obj.Type = 999
 		}
@@ -98,8 +123,77 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle) {
 
 		obj.Padding3 = 0
 		obj.Padding4 = 0
-
+		bb := shapes.BoundsOf(in[i])
+		obj.CLBoundingBox = CLBoundingBox{
+			Min: bb.Min,
+			Max: bb.Max,
+		}
+		obj.NumChildren = 0
+		obj.Children = [111]int32{}
+		//obj.Padding5 = [56]int64{}
 		objs = append(objs, obj)
 	}
-	return objs, triangles
+
+	// before exiting this func, append all gb.objects to objs, but
+	numberOfObjs := len(objs)
+	objs = append(objs, gb.groups...)
+
+	return objs, numberOfObjs, gb.triangles
+}
+
+type GroupBuilder struct {
+	groups         []CLObject
+	triangles      []CLTriangle
+	groupOffset    int32
+	triangleOffset int32
+}
+
+func (gb *GroupBuilder) BuildCLGroup(group *shapes.Group) {
+
+	obj := CLObject{}
+	obj.Transform = group.GetTransform()
+	obj.Inverse = group.GetInverse()
+	obj.InverseTranspose = group.GetInverseTranspose()
+	obj.Color = group.GetMaterial().Color
+	obj.Emission = group.GetMaterial().Emission
+	obj.RefractiveIndex = group.GetMaterial().RefractiveIndex
+	obj.CLBoundingBox = CLBoundingBox{
+		Min: group.BoundingBox.Min,
+		Max: group.BoundingBox.Max,
+	}
+	obj.TrianglesOffset = gb.triangleOffset // object's tri count starts at the _current_ offset
+	var idx = 0
+	var localTrianglesAdded = int32(0)
+	for _, child := range group.Children {
+		grChild, ok := child.(*shapes.Group)
+		if ok {
+			// if group...
+			gb.BuildCLGroup(grChild)
+			obj.Children[idx] = gb.groupOffset
+			obj.NumChildren++
+			idx++
+		} else {
+			tri, ok := child.(*shapes.SmoothTriangle)
+			if ok {
+				clTriangle := CLTriangle{
+					P1: tri.P1,
+					P2: tri.P2,
+					P3: tri.P3,
+					E1: tri.E1,
+					E2: tri.E2,
+					N:  tri.N,
+				}
+				gb.triangles = append(gb.triangles, clTriangle)
+				localTrianglesAdded++
+			}
+			//fmt.Printf("ignore triangle child, for now...\n")
+			//triangleOffset++
+		}
+	}
+	obj.NumTriangles = localTrianglesAdded
+	gb.groups = append(gb.groups, obj)
+
+	// update offset counters
+	gb.groupOffset++
+	gb.triangleOffset = gb.triangleOffset + localTrianglesAdded
 }

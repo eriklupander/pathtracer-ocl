@@ -48,6 +48,26 @@ type Cylinder struct {
 	closed bool
 }
 
+func (c *Cylinder) IntersectLocal(ray geom.Ray) []Intersection {
+	panic("implement me")
+}
+
+func (c *Cylinder) NormalAtLocal(point geom.Tuple4, intersection *Intersection) geom.Tuple4 {
+	panic("implement me")
+}
+
+func (c *Cylinder) GetLocalRay() geom.Ray {
+	panic("implement me")
+}
+
+func (c *Cylinder) CastsShadow() bool {
+	panic("implement me")
+}
+
+func (c *Cylinder) Name() string {
+	panic("implement me")
+}
+
 func (c *Cylinder) ID() int64 {
 	return c.Id
 }

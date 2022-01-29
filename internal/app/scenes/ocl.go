@@ -5,7 +5,9 @@ import (
 	"github.com/eriklupander/pathtracer-ocl/internal/app/camera"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/material"
+	"github.com/eriklupander/pathtracer-ocl/internal/app/obj"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/shapes"
+	"io/ioutil"
 	"math"
 )
 
@@ -101,6 +103,16 @@ func OCLScene() func() *Scene {
 		)
 		mesh := shapes.NewMeshTri([]*shapes.Triangle{tri, tri2})
 		mesh.SetTransform(geom.Translate(0, 0, -.5))
+
+		// Load a grouo from a model
+		gopherModel, err := ioutil.ReadFile("assets/model/gopher.obj")
+		if err != nil {
+			panic(err.Error())
+		}
+		parsedObject := obj.ParseObj(string(gopherModel))
+		group := parsedObject.ToGroup()
+		shapes.Divide(group, 50)
+
 		// lightsource
 		lightsource := shapes.NewSphere()
 		lightsource.SetTransform(geom.Translate(0, 1.36, 0))
@@ -110,7 +122,7 @@ func OCLScene() func() *Scene {
 
 		return &Scene{
 			Camera:  cam,
-			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, cube, mesh, lightsource},
+			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, cube, group, lightsource},
 		}
 	}
 }
