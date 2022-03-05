@@ -1,6 +1,8 @@
 # pathtracer-ocl
 Pathtracer written in Go and OpenCL
 ![example](images/aa-with-box-and-cyl.png)
+_(2048 samples)_
+
 ## Description
 Simple unidirectional pathtracer written just for fun using Go as frontend and OpenCL as computation backend.
 
@@ -21,6 +23,6 @@ Based on or inspired by:
 For this _reference image_ at 1280x960:
 ![example](images/reference.png)
 
-MacBook Pro mid-2014:
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz:  10m45.813990173s
-GeForce GT 750M GPU:                        14m12.049519483s
+### MacBook Pro mid-2014:
+* Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz:  10m45.813990173s
+* GeForce GT 750M GPU:                        14m12.049519483s
