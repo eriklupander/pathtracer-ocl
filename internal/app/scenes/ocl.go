@@ -13,7 +13,8 @@ func OCLScene() func() *Scene {
 	return func() *Scene {
 
 		cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.1, -1.5), geom.NewPoint(0, 0.05, 0))
-
+		cam.FocalLength = cmd.Cfg.FocalLength
+		cam.Aperture = cmd.Cfg.Aperture
 		// left wall
 		leftWall := shapes.NewPlane()
 		leftWall.SetTransform(geom.Translate(-.6, 0, 0))

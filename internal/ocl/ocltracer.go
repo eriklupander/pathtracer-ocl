@@ -50,11 +50,11 @@ type CLCamera struct {
 	PixelSize  float64 // 24
 	HalfWidth  float64 // 32
 	HalfHeight float64 // 40
-	//Aperture    float64
-	//FocalLength float64
+	Aperture    float64 // 48
+	FocalLength float64 // 56
 	//Transform   [16]float64
-	Inverse [16]float64 // 168
-	Padding [88]byte    // 256-88 == 168
+	Inverse [16]float64 // 128 + 56 == 184
+	Padding [72]byte    // 256-72 == 184
 }
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate

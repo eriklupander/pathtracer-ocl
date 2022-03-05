@@ -8,11 +8,11 @@ typedef struct __attribute__((packed)) tag_camera { // Total: 256 + 40 + 16 == 3
     double pixelSize;       // 8 bytes
     double halfWidth;       // 8 bytes
     double halfHeight;      // 8 bytes
-    //double aperture;        // 8 bytes
-    //double focalLength;     // 8 bytes
+    double aperture;        // 8 bytes
+    double focalLength;     // 8 bytes
     //double16 transform;     // 128 bytes
     double16 inverse;       // 128 bytes
-    char padding[88];       // 88
+    char padding[72];       // 72 bytes
 } camera;
 
 typedef struct tag_ray {
@@ -159,7 +159,7 @@ inline double4 mul(double16 mat, double4 vec) {
                    elem4.x + elem4.y + elem4.z + elem4.w);
 }
 
-inline ray rayForPixelPathTracer(unsigned int x, unsigned int y, camera cam, float rndX, float rndY) {
+inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, float rndY) {
 	double4 pointInView = {0.0, 0.0, -1.0, 1.0};
 	double4 originPoint =  {0.0, 0.0, 0.0, 1.0};
 	double xOffset = cam.pixelSize * ((double)x + rndX);
@@ -175,6 +175,18 @@ inline ray rayForPixelPathTracer(unsigned int x, unsigned int y, camera cam, flo
     double4 subVec = pixel - origin;
     double4 direction = normalize(subVec);
 
+    // if DoF...
+    if (cam.aperture != 0) {
+
+        double4 pos = origin + direction*cam.focalLength; //mat.PositionPtr(rc.firstRay, rc.camera.FocalLength, &pos)
+        double4 newOrigin={};
+        newOrigin.x = origin.x + (-cam.aperture + rndY*cam.aperture*2);
+        newOrigin.y = origin.y + (-cam.aperture + rndX*cam.aperture*2);
+        newOrigin.z = origin.z;
+        newOrigin.w = 1.0;
+        direction = pos - newOrigin;
+        origin = newOrigin;
+    }
     ray r = {origin, direction};
     return r;
 }
@@ -197,7 +209,7 @@ __kernel void trace(__global object *objects,
 
   for (unsigned int n = 0; n < samples; n++) {
     // For each sample, compute a new ray cast through the target (x,y) pixel with random offset within the pixel.
-    ray r = rayForPixelPathTracer(x, y, *cam, noise3D(fgi, n, fgi2), noise3D(fgi, fgi2, n));
+    ray r = rayForPixel(x, y, *cam, noise3D(fgi, n, fgi2), noise3D(fgi, fgi2, n));
     double4 rayOrigin = r.origin;
     double4 rayDirection = r.direction;
 

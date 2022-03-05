@@ -43,11 +43,11 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 		PixelSize:  ctx.camera.PixelSize,
 		HalfWidth:  ctx.camera.HalfWidth,
 		HalfHeight: ctx.camera.HalfHeight,
-		//Aperture:    ctx.camera.Aperture,
-		//FocalLength: ctx.camera.FocalLength,
+		Aperture:    ctx.camera.Aperture,
+		FocalLength: ctx.camera.FocalLength,
 		//Transform:   ctx.camera.Transform,
 		Inverse: ctx.camera.Inverse,
-		Padding: [88]byte{},
+		Padding: [72]byte{},
 	}
 
 	// Render the scene
