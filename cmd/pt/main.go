@@ -21,7 +21,7 @@ func main() {
 	var configFlags = pflag.NewFlagSet("config", pflag.ExitOnError)
 	configFlags.Int("width", 640, "Image width")
 	configFlags.Int("height", 480, "Image height")
-	configFlags.Int("samples", 1, "Number of samples per pixel")
+	configFlags.Int("samples", 16, "Number of samples per pixel")
 	configFlags.String("scene", "reference", "scene from /scenes")
 
 	if err := configFlags.Parse(os.Args[1:]); err != nil {

@@ -149,7 +149,6 @@ type GroupBuilder struct {
 }
 
 func (gb *GroupBuilder) BuildCLGroup(group *shapes.Group) {
-
 	obj := CLObject{}
 	obj.Transform = group.GetTransform()
 	obj.Inverse = group.GetInverse()
@@ -182,6 +181,9 @@ func (gb *GroupBuilder) BuildCLGroup(group *shapes.Group) {
 					E1: tri.E1,
 					E2: tri.E2,
 					N:  tri.N,
+					N1: tri.N1,
+					N2: tri.N2,
+					N3: tri.N3,
 				}
 				gb.triangles = append(gb.triangles, clTriangle)
 				localTrianglesAdded++

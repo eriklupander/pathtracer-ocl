@@ -19,14 +19,12 @@ typedef struct __attribute__((packed)) tag_object {
   double reflectivity;       // 8 bytes
   int numTriangles;          // 4 bytes. If > 0, we need to iterate over triangles when checking this object, starting at offset
   int trianglesOffset;       // 4 bytes
-  int children[2];           // 8 bytes
+  double padding3;           // 8 bytes
   double padding4;           // 8 bytes
   double4 bbMin;             // 32 bytes. Bounding box min
   double4 bbMax;             // 32 bytes. Bounding box max
-  long8 padding5;           // 64 bytes
-  long16 padding6;          // 128 bytes
-  long16 padding7;          // 128 bytes
-  long16 padding8;          // 128 bytes
+  int numChildren;           // 4 bytes
+  int children[111];         // fills up 444 bytes to 1024
 } object;
 
 typedef struct tag_triangle {
@@ -37,8 +35,11 @@ typedef struct tag_triangle {
     double4 e1;       // 32 bytes
     double4 e2;       // 32 bytes
     double4 n;        // 32 bytes
-    double8 padding;  // 64 bytes
-} triangle;
+    double4 n1;       // 32 bytes
+    double4 n2;       // 32 bytes
+    double4 n3;       // 32 bytes
+    uint8 padding[224]// 224 bytes
+} triangle;           // 512 total
 
 typedef struct tag_intersection {
   unsigned int objectIndex;
@@ -174,12 +175,13 @@ __kernel void trace(__global ray *rays, __global object *objects,
 
   double colorWeight = 1.0 / samples;
   int i = get_global_id(0);
-  //if (i == 0) {
+  if (i == 0) {
+    printf("num normal objects: %d\n", numObjects);
   //  printf("left child:  %d\n", objects[8].children[0]);
   //  printf("right child: %d\n", objects[8].children[1]);
   //  printf("bbmin: %f %f %f\n", objects[8].bbMin.x, objects[8].bbMin.y, objects[8].bbMin.z);
   //  printf("bbmax: %f %f %f\n", objects[8].bbMax.x, objects[8].bbMax.y, objects[8].bbMax.z);
-  //}
+  }
   float fgi = seedX[i] / numObjects;
 
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
@@ -196,10 +198,10 @@ __kernel void trace(__global ray *rays, __global object *objects,
     // Each ray may bounce up to 5 times
     bounce bounces[5] = {};
     for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
-     // track up to 16 intersections per ray.
-      double intersections[8] = {0};  // t of an intersection
-      unsigned int xsObjects[8] = {0}; // index maps to each xs above, value to objects
-      double4 xsTriangle[8] = {0,0,0,0};
+      // track up to 16 intersections per ray.
+      double intersections[16] = {0};  // t of an intersection
+      unsigned int xsObjects[16] = {0}; // index maps to each xs above, value to objects
+      double4 xsTriangle[16] = {0,0,0,0};
 
       // ----------------------------------------------------------
       // Loop through scene objects in order to find intersections
@@ -221,6 +223,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
             numIntersections++;
           }
         } else if (objType == 1) { // SPHERE
+
           // this is a vector from the origin of the ray to the center of the
           // sphere at 0,0,0
           double4 vecToCenter = tRayOrigin - originPoint;
@@ -355,6 +358,31 @@ __kernel void trace(__global ray *rays, __global object *objects,
                 xsTriangle[numIntersections] = tri.n;
                 numIntersections++;
             }
+         } else if (objType == 5) {
+            // Groups (with triangles or subgroups)
+            // check bounding box of group
+            double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x);
+            double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y);
+            double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z);
+
+            // Om det största av min-värdena är större än det minsta max-värdet.
+            double tmin = maxX(xt.x, yt.x, zt.x);
+            double tmax = minX(xt.y, yt.y, zt.y);
+            if (tmin > tmax) {
+                // No intersection
+                //printf("ray %d did not intersect group bb\n", i);
+                continue;
+            }
+            // check all triangles in group?
+            if (objects[j].numTriangles > 0) {
+                printf("group %d has triangles\n", j);
+            }
+
+            // now to the difficult part of doing subgroups without recursion...
+            // create a stack:
+
+
+
          }
       }
 

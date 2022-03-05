@@ -40,15 +40,12 @@ type CLObject struct {
 	Reflectivity     float64
 	NumTriangles     int32
 	TrianglesOffset  int32
-	//Children         [2]int32 // 8 bytes
-	Padding3 int64
-	Padding4 int64
+	Padding3         int64
+	Padding4         int64
 	// 512 bytes here
-	CLBoundingBox
+	CLBoundingBox          // 64 bytes
 	NumChildren int32      // 4 byte
 	Children    [111]int32 // 111*4 == 444
-	//CLBoundingBox           // 64 bytes totally for the bounding box
-	//Padding5      [56]int64 // 448 bytes padding
 }
 
 type CLBoundingBox struct {
@@ -63,7 +60,10 @@ type CLTriangle struct {
 	E1      [4]float64 // 32 bytes
 	E2      [4]float64 // 32 bytes
 	N       [4]float64 // 32 bytes
-	Padding [8]float64 // 64 bytes
+	N1      [4]float64 // 32 bytes
+	N2      [4]float64 // 32 bytes (256 here)
+	N3      [4]float64 // 32 bytes (288 here)
+	Padding [224]byte
 }
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
@@ -72,6 +72,7 @@ func Trace(rays []CLRay, objects []CLObject, normalObjects int, triangles []CLTr
 	logrus.Infof("trace with %d rays and %d objects of which %d are main objects, and %d triangles", len(rays), len(objects), normalObjects, len(triangles))
 	logrus.Infof("CLRay size: %d bytes", unsafe.Sizeof(rays[0]))
 	logrus.Infof("CLObject size: %d bytes", unsafe.Sizeof(objects[0]))
+	logrus.Infof("CLTriangle size: %d bytes", unsafe.Sizeof(triangles[0]))
 
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
@@ -194,7 +195,7 @@ func computeBatch(rays []CLRay, objects []CLObject, normalObjects int, triangles
 	if len(triangles) > 0 {
 		numTri = len(triangles)
 	}
-	inputTriangles, err := context.CreateEmptyBuffer(cl.MemReadOnly, 256*numTri)
+	inputTriangles, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*numTri)
 	if err != nil {
 		logrus.Fatalf("CreateBuffer failed for triangles input: %+v", err)
 	}
