@@ -153,7 +153,7 @@ __kernel void trace(__global ray *rays, __global object *objects,
                     __global double *seedX, const unsigned int samples) {
   double colorWeight = 1.0 / samples;
   int i = get_global_id(0);
-
+   // printf("num of rays: %d\n", sizeof(rays));
   float fgi = seedX[i] / numObjects;
 
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
@@ -162,8 +162,9 @@ __kernel void trace(__global ray *rays, __global object *objects,
 
   for (unsigned int n = 0; n < samples; n++) {
     // Each new sample needs to reset to original ray
-    double4 rayOrigin = rays[i].origin;
-    double4 rayDirection = rays[i].direction;
+
+    double4 rayOrigin = rays[i*samples+n].origin;
+    double4 rayDirection = rays[i*samples+n].direction;
 
     // for each bounce...
     unsigned int actualBounces = 0;

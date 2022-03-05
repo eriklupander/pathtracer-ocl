@@ -32,15 +32,18 @@ func NewCtx(id int, scene *scenes.Scene, canvas *canvas2.Canvas, samples int) *C
 }
 
 // for the OCL pathtracer, call this in the main thread and pre-calculate all rays.
-func (ctx *Ctx) renderPixelPathTracer(width, height int) {
+func (ctx *Ctx) renderPixelPathTracer(width, height, samples int) {
 
 	rays := make([]geom.Ray, 0)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			// create ray
-			cameraRay := geom.NewEmptyRay()
-			ctx.rayForPixelPathTracer(x, y, &cameraRay)
-			rays = append(rays, cameraRay)
+			for z := 0; z < samples; z++ {
+				// create ray
+				cameraRay := geom.NewEmptyRay()
+				ctx.rayForPixelPathTracer(x, y, &cameraRay)
+				rays = append(rays, cameraRay)
+			}
+
 		}
 	}
 
@@ -69,10 +72,10 @@ func (ctx *Ctx) rayForPixelPathTracer(x, y int, out *geom.Ray) {
 	subVec := geom.NewVector(0, 0, 0)
 	pixel := geom.NewTuple()
 	// We might move the random in-pixel offset into OpenCL
-	//xOffset := ctx.camera.PixelSize * (float64(x) + ctx.rnd.Float64()) // 0.5
-	//yOffset := ctx.camera.PixelSize * (float64(y) + ctx.rnd.Float64()) // 0.5
-	xOffset := ctx.camera.PixelSize * (float64(x) + 0.5)
-	yOffset := ctx.camera.PixelSize * (float64(y) + 0.5)
+	xOffset := ctx.camera.PixelSize * (float64(x) + ctx.rnd.Float64()) // 0.5
+	yOffset := ctx.camera.PixelSize * (float64(y) + ctx.rnd.Float64()) // 0.5
+	//xOffset := ctx.camera.PixelSize * (float64(x) + 0.5)
+	//yOffset := ctx.camera.PixelSize * (float64(y) + 0.5)
 
 	// this feels a little hacky but actually works.
 	worldX := ctx.camera.HalfWidth - xOffset

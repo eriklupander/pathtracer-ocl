@@ -138,7 +138,9 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, context, kernel, queue, samples, workGroupSize)...)
+		fromIndex := y * width * samples
+		toIndex := y*width*samples + width*batchSize*samples
+		results = append(results, computeBatch(rays[fromIndex:toIndex], objects, context, kernel, queue, samples, workGroupSize)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
@@ -209,7 +211,7 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 	}
 
 	// 7. Finally, start work! Enqueue executes the loaded args on the specified kernel.
-	if _, err := queue.EnqueueNDRangeKernel(kernel, nil, []int{len(rays)}, []int{workGroupSize}, nil); err != nil {
+	if _, err := queue.EnqueueNDRangeKernel(kernel, nil, []int{len(rays) / samples}, []int{workGroupSize}, nil); err != nil {
 		logrus.Fatalf("EnqueueNDRangeKernel failed: %+v", err)
 	}
 
@@ -219,7 +221,7 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 	}
 
 	// 9. Allocate storage for loading the output from the OpenCL program, 4 float64 per cast ray. RGBA
-	results := make([]float64, len(rays)*4)
+	results := make([]float64, len(rays)/samples*4)
 
 	// 10. The EnqueueReadBuffer copies the data in the OpenCL "output" buffer into the "results" slice.
 	dataPtrOut := unsafe.Pointer(&results[0])
