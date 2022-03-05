@@ -22,6 +22,8 @@ func main() {
 	configFlags.Int("width", 640, "Image width")
 	configFlags.Int("height", 480, "Image height")
 	configFlags.Int("samples", 1, "Number of samples per pixel")
+	configFlags.Float64("aperture", 0.0, "Aperture. If 0, no DoF will be used")
+	configFlags.Float64("focal-length", 0.0, "Focal length.")
 	configFlags.String("scene", "reference", "scene from /scenes")
 
 	if err := configFlags.Parse(os.Args[1:]); err != nil {
