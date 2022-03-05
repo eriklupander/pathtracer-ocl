@@ -1,6 +1,20 @@
 __constant double PI = 3.14159265359f;
 __constant unsigned int MAX_BOUNCES = 4;
 
+typedef struct __attribute__((packed)) tag_camera { // Total: 256 + 40 + 16 == 312
+    int width;     // 4 bytes
+    int height;    // 4 bytes
+    double fov;             // 8 bytes
+    double pixelSize;       // 8 bytes
+    double halfWidth;       // 8 bytes
+    double halfHeight;      // 8 bytes
+    //double aperture;        // 8 bytes
+    //double focalLength;     // 8 bytes
+    //double16 transform;     // 128 bytes
+    double16 inverse;       // 128 bytes
+    char padding[88];       // 88
+} camera;
+
 typedef struct tag_ray {
   double4 origin;
   double4 direction;
@@ -82,17 +96,14 @@ inline double2 intersectCaps(double4 origin, double4 direction, double minY, dou
 	// the ray with the plane at y=cyl.minimum
 	double t1 = (minY - origin.y) / direction.y;
 	if (checkCap(origin, direction, t1)) {
-		//*xs = append(*xs, NewIntersection(t, c))
-        // TODO 
-        retVal.x = t1;
+		retVal.x = t1;
 	}
 
 	// check for an intersection with the upper end cap by intersecting
 	// the ray with the plane at y=cyl.maximum
 	double t2 = (maxY - origin.y) / direction.y;
 	if (checkCap(origin, direction, t2)) {
-		//*xs = append(*xs, NewIntersection(t, c))
-        retVal.y = t2;
+		retVal.y = t2;
 	}
     return retVal;
 }
@@ -148,32 +159,57 @@ inline double4 mul(double16 mat, double4 vec) {
                    elem4.x + elem4.y + elem4.z + elem4.w);
 }
 
-__kernel void trace(__global ray *rays, __global object *objects,
+inline ray rayForPixelPathTracer(unsigned int x, unsigned int y, camera cam, float rndX, float rndY) {
+	double4 pointInView = {0.0, 0.0, -1.0, 1.0};
+	double4 originPoint =  {0.0, 0.0, 0.0, 1.0};
+	double xOffset = cam.pixelSize * ((double)x + rndX);
+    double yOffset = cam.pixelSize * ((double)y + rndY);
+
+	// this feels a little hacky but actually works.
+	pointInView.x = cam.halfWidth - xOffset;
+	pointInView.y = cam.halfHeight - yOffset;
+
+    double4 pixel = mul(cam.inverse, pointInView);
+    double4 origin = mul(cam.inverse, originPoint);
+
+    double4 subVec = pixel - origin;
+    double4 direction = normalize(subVec);
+
+    ray r = {origin, direction};
+    return r;
+}
+
+
+__kernel void trace(__global object *objects,
                     const unsigned int numObjects, __global double *output,
-                    __global double *seedX, const unsigned int samples) {
+                    __global double *seedX, const unsigned int samples, __global camera *cam, const unsigned int yOffset) {
   double colorWeight = 1.0 / samples;
   int i = get_global_id(0);
-
   float fgi = seedX[i] / numObjects;
-
+  float fgi2 = seedX[i] / samples;
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
 
   double4 colors = (double4)(0, 0, 0, 0);
 
-  for (unsigned int n = 0; n < samples; n++) {
-    // Each new sample needs to reset to original ray
-    double4 rayOrigin = rays[i].origin;
-    double4 rayDirection = rays[i].direction;
+  // get current x,y coordinate from i given image width
+  unsigned int x = i % cam->width;
+  unsigned int y = yOffset + i / cam->width;
 
-    // for each bounce...
+  for (unsigned int n = 0; n < samples; n++) {
+    // For each sample, compute a new ray cast through the target (x,y) pixel with random offset within the pixel.
+    ray r = rayForPixelPathTracer(x, y, *cam, noise3D(fgi, n, fgi2), noise3D(fgi, fgi2, n));
+    double4 rayOrigin = r.origin;
+    double4 rayDirection = r.direction;
+
+
     unsigned int actualBounces = 0;
     // Each ray may bounce up to 5 times
     bounce bounces[5] = {};
     for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
-     // track up to 16 intersections per ray.
+
+      // track up to 8 intersections per ray.
       double intersections[8] = {0};  // t of an intersection
       unsigned int xsObjects[8] = {0}; // index maps to each xs above, value to objects
-
 
       // ----------------------------------------------------------
       // Loop through scene objects in order to find intersections
@@ -385,8 +421,11 @@ __kernel void trace(__global ray *rays, __global object *objects,
         // order to avoid self-intersection on the next bounce.
         double4 overPoint = position + normalVec * 0.0001;
 
-        // Prepare the outgoing ray (next bounce), reuse the original ray, just
+        // Prepare the outgoing ray (next bounce) by reusing the original ray, just
         // update its origin and direction.
+
+        // Impl here supports either diffuse or reflected, but for obj.reflectivity > 0 a proportionate portion of samples
+        // will diffuse instead of reflect. Poor-man's BRDF
         if (obj.reflectivity == 0.0 || noise3D(fgi, n, b) > obj.reflectivity) {
             // Diffuse
             rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
@@ -428,24 +467,13 @@ __kernel void trace(__global ray *rays, __global object *objects,
       // perform cosine-weighted importance sampling by multiplying the mask
       // with the cosine
       mask *= bounces[x].cos;
-
-/*
-      if (i == 6397 && bounces[actualBounces-1].emission.x > 0.0) {
-        printf("bounce: %d ", x);
-        printf("accum: %f %f %f ", accumColor.x, accumColor.y, accumColor.z);
-        printf("mask: %f %f %f ", mask.x, mask.y, mask.z);
-        printf("cos: %f ", bounces[x].cos);
-        printf("color: %f %f %f ", bounces[x].color.x, bounces[x].color.y, bounces[x].color.z);
-        printf("emission: %f %f %f\n", bounces[x].emission.x, bounces[x].emission.y, bounces[x].emission.z);
-      }
-      */
     }
 
     // Finish this "sample" by adding the accumulated color to the total
     colors += accumColor;
   }
 
-  // Finish the ray by multiplying each RGB component by its total fraction and
+  // Finish the pixel by multiplying each RGB component by its total fraction and
   // store in the output bufer.
   output[i * 4] = colors.x * colorWeight;
   output[i * 4 + 1] = colors.y * colorWeight;

@@ -34,25 +34,24 @@ func NewCtx(id int, scene *scenes.Scene, canvas *canvas2.Canvas, samples int) *C
 // for the OCL pathtracer, call this in the main thread and pre-calculate all rays.
 func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 
-	rays := make([]geom.Ray, 0)
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			// create ray
-			cameraRay := geom.NewEmptyRay()
-			ctx.rayForPixelPathTracer(x, y, &cameraRay)
-			rays = append(rays, cameraRay)
-		}
-	}
-
-	// with all rays complete, we should call the OpenCL trace with:
-	// all rays, world scene to intersect with. How should we layout each ray?
-	// a ray is a POINT 4xfloat64 and a DIRECTION 4xfloat64. So each ray can be treated as 8x*float64
-	// where the first 4 elements is the POINT and the last 4 is the DIRECTION.
-	rayData := ocl.BuildRayBufferCL(rays)
 	sceneData := ocl.BuildSceneBufferCL(ctx.scene.Objects)
 
+	clCamera := ocl.CLCamera{
+		Width:      int32(ctx.camera.Width),
+		Height:     int32(ctx.camera.Height),
+		Fov:        ctx.camera.Fov,
+		PixelSize:  ctx.camera.PixelSize,
+		HalfWidth:  ctx.camera.HalfWidth,
+		HalfHeight: ctx.camera.HalfHeight,
+		//Aperture:    ctx.camera.Aperture,
+		//FocalLength: ctx.camera.FocalLength,
+		//Transform:   ctx.camera.Transform,
+		Inverse: ctx.camera.Inverse,
+		Padding: [88]byte{},
+	}
+
 	// Render the scene
-	result := ocl.Trace(rayData, sceneData, width, height, ctx.samples)
+	result := ocl.Trace(sceneData, width, height, ctx.samples, clCamera)
 
 	// result now contains RGBA values for each pixel,
 	j := 0
@@ -62,28 +61,4 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 		ctx.canvas.WritePixelMutex(x, y, geom.NewColor(result[i], result[i+1], result[i+2]))
 		j++
 	}
-}
-
-func (ctx *Ctx) rayForPixelPathTracer(x, y int, out *geom.Ray) {
-	pointInView := geom.NewPoint(0, 0, -1.0)
-	subVec := geom.NewVector(0, 0, 0)
-	pixel := geom.NewTuple()
-	// We might move the random in-pixel offset into OpenCL
-	//xOffset := ctx.camera.PixelSize * (float64(x) + ctx.rnd.Float64()) // 0.5
-	//yOffset := ctx.camera.PixelSize * (float64(y) + ctx.rnd.Float64()) // 0.5
-	xOffset := ctx.camera.PixelSize * (float64(x) + 0.5)
-	yOffset := ctx.camera.PixelSize * (float64(y) + 0.5)
-
-	// this feels a little hacky but actually works.
-	worldX := ctx.camera.HalfWidth - xOffset
-	worldY := ctx.camera.HalfHeight - yOffset
-
-	pointInView[0] = worldX
-	pointInView[1] = worldY
-
-	geom.MultiplyByTuplePtr(&ctx.camera.Inverse, &pointInView, &pixel)
-	geom.MultiplyByTuplePtr(&ctx.camera.Inverse, &originPoint, &out.Origin)
-
-	geom.SubPtr(pixel, out.Origin, &subVec)
-	geom.NormalizePtr(&subVec, &out.Direction)
 }

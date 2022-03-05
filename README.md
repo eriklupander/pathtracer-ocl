@@ -1,13 +1,14 @@
 # pathtracer-ocl
 Pathtracer written in Go and OpenCL
-![example](images/reference.png)
+![example](images/aa-with-box-and-cyl.png)
 ## Description
 Simple unidirectional pathtracer written just for fun using Go as frontend and OpenCL as computation backend.
 
 Supports:
-* Spheres and Planes
-* Diffuse materials
+* Spheres, Planes, Boxes, Cylinders
+* Diffuse and reflective materials
 * Movable camera
+* Anti-aliasing
 
 Based on or inspired by:
 
@@ -17,7 +18,8 @@ Based on or inspired by:
 * And my own mashup of the three above, a simple and Go-native path-tracer https://github.com/eriklupander/pathtracer
 
 ## Performance
-For the _reference image_ at 1280x960:
+For this _reference image_ at 1280x960:
+![example](images/reference.png)
 
 MacBook Pro mid-2014:
 Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz:  10m45.813990173s

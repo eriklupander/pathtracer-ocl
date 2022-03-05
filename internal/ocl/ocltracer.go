@@ -43,10 +43,26 @@ type CLObject struct {
 	Padding4         int64
 }
 
+type CLCamera struct {
+	Width      int32   // 4
+	Height     int32   // 8
+	Fov        float64 // 16
+	PixelSize  float64 // 24
+	HalfWidth  float64 // 32
+	HalfHeight float64 // 40
+	//Aperture    float64
+	//FocalLength float64
+	//Transform   [16]float64
+	Inverse [16]float64 // 168
+	Padding [88]byte    // 256-88 == 168
+}
+
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float64 {
-	logrus.Infof("trace with %d rays and %d objects", len(rays), len(objects))
+func Trace(objects []CLObject, width, height, samples int, camera CLCamera) []float64 {
+	numPixels := int(camera.Width * camera.Height)
+	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
+
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
 		logrus.Fatalf("Failed to get platforms: %+v", err)
@@ -122,61 +138,65 @@ func Trace(rays []CLRay, objects []CLObject, width, height, samples int) []float
 	logrus.Infof("Work group size: %d", workGroupSize)
 
 	// Make sure the WGS is never greater than the total number of items we're going to process
-	if workGroupSize > len(rays) {
-		workGroupSize = len(rays)
+	if workGroupSize > numPixels {
+		workGroupSize = numPixels
 	}
-	if len(rays)%workGroupSize != 0 {
+	if numPixels%workGroupSize != 0 {
 		logrus.Fatal("The number of rays must be a power of the WorkGroupSize")
 	}
 
 	// split work into batches in order to avoid kernels running for more than 10 seconds
 	// otherwise, the GPU driver will kill us.
 	results := make([]float64, 0)
-	batchSize := 16
-	if batchSize > len(rays) {
-		batchSize = len(rays)
+	batchSize := 8
+	if batchSize > numPixels {
+		batchSize = numPixels
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(rays[y*width:y*width+width*batchSize], objects, context, kernel, queue, samples, workGroupSize)...)
+		results = append(results, computeBatch(objects, camera, context, kernel, queue, samples, workGroupSize, y, batchSize)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results
 }
 
-func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize int) []float64 {
+func computeBatch(objects []CLObject, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int) []float64 {
+	pixelsInBatch := rowsPerBatch * int(camera.Width)
+
+	// populate seed of random numbers, OpenCL can't do random by itself AFAIK
+	seed := make([]float64, pixelsInBatch)
+	for i := 0; i < pixelsInBatch; i++ {
+		seed[i] = rand.Float64()
+	}
+
 	// 5. Time to start loading data into GPU memory
 
 	// 5.1 create OpenCL buffers (memory) for the pre-computed rays and scene objects.
 	// Note that we're allocating 64 bytes per ray (8xfloat64) and 512 bytes per scene object.
 	// Remember - each float64 uses 8 bytes.
-	inputRays, err := context.CreateEmptyBuffer(cl.MemReadOnly, 64*len(rays))
-	if err != nil {
-		logrus.Fatalf("CreateBuffer failed for vectors input: %+v", err)
-	}
-	defer inputRays.Release()
 
-	inputObjects, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(objects))
+	objectsBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(objects))
 	if err != nil {
-		logrus.Fatalf("CreateBuffer failed for vectors input: %+v", err)
+		logrus.Fatalf("CreateBuffer failed for objects input: %+v", err)
 	}
-	defer inputObjects.Release()
+	defer objectsBuffer.Release()
 
-	seed := make([]float64, len(rays))
-	for i := 0; i < len(rays); i++ {
-		seed[i] = rand.Float64()
-	}
-
-	seedNumbers, err := context.CreateEmptyBuffer(cl.MemReadOnly, 8*len(seed))
+	seedBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 8*len(seed))
 	if err != nil {
-		logrus.Fatalf("CreateBuffer failed for vectors input: %+v", err)
+		logrus.Fatalf("CreateBuffer failed for seedBuffer input: %+v", err)
 	}
-	defer seedNumbers.Release()
+	defer seedBuffer.Release()
+
+	cameraBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 256)
+	if err != nil {
+		logrus.Fatalf("CreateBuffer failed for camera input: %+v", err)
+	}
+	defer cameraBuffer.Release()
 
 	// 5.2 create OpenCL buffer (memory) for the output data, we want RGBA per ray, i.e. 4 float64 per ray.
 	// So, we'll need 32 bytes to store the final computed color for each ray. Remember, we pass 1 ray per pixel.
-	output, err := context.CreateEmptyBuffer(cl.MemReadOnly, len(rays)*32)
+	output, err := context.CreateEmptyBuffer(cl.MemReadOnly, pixelsInBatch*32)
 	if err != nil {
 		logrus.Fatalf("CreateBuffer failed for output: %+v", err)
 	}
@@ -185,31 +205,31 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 	// 5.3 This is where we connect our input to the command queue and upload the actual data into GPU memory
 	//     The rayDataPtr is a pointer to the first element of the rays slice,
 	//     while rayDataTotalSizeBytes is the total length of the ray data, in bytes - i.e len(rays) * 64.
-	rayDataPtr := unsafe.Pointer(&rays[0])
-	rayDataTotalSizeBytes := int(unsafe.Sizeof(rays[0])) * len(rays)
-	if _, err := queue.EnqueueWriteBuffer(inputRays, true, 0, rayDataTotalSizeBytes, rayDataPtr, nil); err != nil {
+	objectsDataPtr := unsafe.Pointer(&objects[0])
+	objectsDataSize := int(unsafe.Sizeof(objects[0])) * len(objects)
+	if _, err := queue.EnqueueWriteBuffer(objectsBuffer, true, 0, objectsDataSize, objectsDataPtr, nil); err != nil {
 		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
 	}
 
-	dataPtrVec2 := unsafe.Pointer(&objects[0])
-	dataSizeVec2 := int(unsafe.Sizeof(objects[0])) * len(objects)
-	if _, err := queue.EnqueueWriteBuffer(inputObjects, true, 0, dataSizeVec2, dataPtrVec2, nil); err != nil {
+	seedDataPtr := unsafe.Pointer(&seed[0])
+	seedDataSize := int(unsafe.Sizeof(seed[0])) * len(seed)
+	if _, err := queue.EnqueueWriteBuffer(seedBuffer, true, 0, seedDataSize, seedDataPtr, nil); err != nil {
 		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
 	}
 
-	dataPtrVec3 := unsafe.Pointer(&seed[0])
-	dataSizeVec3 := int(unsafe.Sizeof(seed[0])) * len(seed)
-	if _, err := queue.EnqueueWriteBuffer(seedNumbers, true, 0, dataSizeVec3, dataPtrVec3, nil); err != nil {
+	cameraDataPtr := unsafe.Pointer(&camera)
+	cameraDataSize := int(unsafe.Sizeof(camera))
+	if _, err := queue.EnqueueWriteBuffer(cameraBuffer, true, 0, cameraDataSize, cameraDataPtr, nil); err != nil {
 		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
 	}
 
 	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
-	if err := kernel.SetArgs(inputRays, inputObjects, uint32(len(objects)), output, seedNumbers, uint32(samples)); err != nil {
+	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset)); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 
 	// 7. Finally, start work! Enqueue executes the loaded args on the specified kernel.
-	if _, err := queue.EnqueueNDRangeKernel(kernel, nil, []int{len(rays)}, []int{workGroupSize}, nil); err != nil {
+	if _, err := queue.EnqueueNDRangeKernel(kernel, nil, []int{pixelsInBatch}, []int{workGroupSize}, nil); err != nil {
 		logrus.Fatalf("EnqueueNDRangeKernel failed: %+v", err)
 	}
 
@@ -219,7 +239,7 @@ func computeBatch(rays []CLRay, objects []CLObject, context *cl.Context, kernel 
 	}
 
 	// 9. Allocate storage for loading the output from the OpenCL program, 4 float64 per cast ray. RGBA
-	results := make([]float64, len(rays)*4)
+	results := make([]float64, pixelsInBatch*4)
 
 	// 10. The EnqueueReadBuffer copies the data in the OpenCL "output" buffer into the "results" slice.
 	dataPtrOut := unsafe.Pointer(&results[0])

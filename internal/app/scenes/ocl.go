@@ -74,10 +74,10 @@ func OCLScene() func() *Scene {
 
 		// cylinder
 		cyl := shapes.NewCylinderMMC(0, 0.4, true)
-		cyl.SetTransform(geom.Translate(0, -0.1, -0.2))
-		cyl.SetTransform(geom.RotateY(math.Pi / 4))
-		cyl.SetTransform(geom.RotateZ(math.Pi / 2))
-		cyl.SetTransform(geom.Scale(0.1, 1, 0.1))
+		cyl.SetTransform(geom.Translate(0.45, -0.5, -0.2))
+		//cyl.SetTransform(geom.RotateY(math.Pi / 4))
+		//cyl.SetTransform(geom.RotateZ(math.Pi / 2))
+		cyl.SetTransform(geom.Scale(0.075, 1, 0.075))
 		cyl.SetMaterial(material.NewDiffuse(0.92, 0.4, 0.8))
 
 		// cube
