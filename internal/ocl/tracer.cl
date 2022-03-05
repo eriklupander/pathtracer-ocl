@@ -70,7 +70,7 @@ inline bool checkCap(double4 origin, double4 direction, double t) {
 	return pow(x, 2) + pow(z, 2) <= 1.0;
 }
 
-inline double2 intersectCaps(double4 origin, double4 direction, object* obj) {
+inline double2 intersectCaps(double4 origin, double4 direction, double minY, double maxY) {
 	// !c.closed removed
     if (fabs(direction.y) < 0.0001) {
 		return (double2)(0.0,0.0);
@@ -80,7 +80,7 @@ inline double2 intersectCaps(double4 origin, double4 direction, object* obj) {
 
 	// check for an intersection with the lower end cap by intersecting
 	// the ray with the plane at y=cyl.minimum
-	double t1 = (obj->minY - origin.y) / direction.y;
+	double t1 = (minY - origin.y) / direction.y;
 	if (checkCap(origin, direction, t1)) {
 		//*xs = append(*xs, NewIntersection(t, c))
         // TODO 
@@ -89,7 +89,7 @@ inline double2 intersectCaps(double4 origin, double4 direction, object* obj) {
 
 	// check for an intersection with the upper end cap by intersecting
 	// the ray with the plane at y=cyl.maximum
-	double t2 = (obj->maxY - origin.y) / direction.y;
+	double t2 = (maxY - origin.y) / direction.y;
 	if (checkCap(origin, direction, t2)) {
 		//*xs = append(*xs, NewIntersection(t, c))
         retVal.y = t2;
@@ -223,60 +223,64 @@ __kernel void trace(__global ray *rays, __global object *objects,
           }
         } else if (objType == 2) {
             // Cylinder intersection
-            // double rdx2 = tRayDirection.x * tRayDirection.x;
-            // double rdz2 = tRayDirection.z * tRayDirection.z;
+             double rdx2 = tRayDirection.x * tRayDirection.x;
+             double rdz2 = tRayDirection.z * tRayDirection.z;
 
-            // double a = rdx2 + rdz2;
-            // if (fabs(a) < 0.0001) {
-            //     //c.intercectCaps(ray, xs)
-            //     continue;
-            // }
+             double a = rdx2 + rdz2;
+             if (fabs(a) < 0.0001) {
+                 //c.intercectCaps(ray, xs)
+                 continue;
+             }
 
-            // double b = 2*tRayOrigin.x*tRayDirection.x + 2*tRayOrigin.z*tRayDirection.z;
+             double b = 2*tRayOrigin.x*tRayDirection.x + 2*tRayOrigin.z*tRayDirection.z;
 
-            // double rox2 = tRayOrigin.x * tRayOrigin.x;
-            // double roz2 = tRayOrigin.z * tRayOrigin.z;
+             double rox2 = tRayOrigin.x * tRayOrigin.x;
+             double roz2 = tRayOrigin.z * tRayOrigin.z;
 
-            // double c1 = rox2 + roz2 - 1;
+             double c1 = rox2 + roz2 - 1;
 
-            // double disc = b*b - 4*a*c1;
+             double disc = b*b - 4*a*c1;
 
-            // // ray does not intersect the cylinder
-            // if (disc < 0.0) {
-            //     continue;
-            // }
+             // ray does not intersect the cylinder
+             if (disc < 0.0) {
+                 continue;
+             }
 
-            // double t0 = (-b - sqrt(disc)) / (2 * a);
-            // double t1 = (-b + sqrt(disc)) / (2 * a);
+             double t0 = (-b - sqrt(disc)) / (2 * a);
+             double t1 = (-b + sqrt(disc)) / (2 * a);
 
-            // double y0 = tRayOrigin.y + t0*tRayDirection.y;
+             double y0 = tRayOrigin.y + t0*tRayDirection.y;
 
-            // // BROKEN BELOW!!!
-            // if (y0 > objects[j].minY && y0 < objects[j].maxY) {
-            //     //*xs = append(*xs, NewIntersection(t0, c))
-            //     // add intersection
-            //     intersections[j] = t0;
-            //     numIntersections++;
-            // }
+             // BROKEN BELOW!!!
+             if (y0 > objects[j].minY && y0 < objects[j].maxY) {
+                 //*xs = append(*xs, NewIntersection(t0, c))
+                 // add intersection
+                 intersections[numIntersections] = t0;
+                 xsObjects[numIntersections] = j;
+                 numIntersections++;
+             }
 
-            // double y1 = tRayOrigin.y + t1*tRayDirection.y;
-            // if (y1 > objects[j].minY && y1 < objects[j].maxY) {
-            //     //*xs = append(*xs, NewIntersection(t1, c))
-            //     // add intersection
-            //     intersections[j] = t1;
-            //     numIntersections++;
-            // }
+             double y1 = tRayOrigin.y + t1*tRayDirection.y;
+             if (y1 > objects[j].minY && y1 < objects[j].maxY) {
+                 //*xs = append(*xs, NewIntersection(t1, c))
+                 // add intersection
+                 intersections[numIntersections] = t1;
+                 xsObjects[numIntersections] = j;
+                 numIntersections++;
+             }
 
-            // // TODO fix caps
-            // double2 caps = intersectCaps(tRayOrigin, tRayDirection, xs, &objects[j])
-            // if (caps.x > 0.0) {
-            //     intersections[j] = caps.x;
-            //     numIntersections++;
-            // }
-            // if (caps.y > 0.0) {
-            //     intersections[j] = caps.y;
-            //     numIntersections++;
-            // }
+             // TODO fix caps
+             double2 caps = intersectCaps(tRayOrigin, tRayDirection, objects[j].minY, objects[j].maxY);
+             if (caps.x > 0.0) {
+                 intersections[numIntersections] = caps.x;
+                 xsObjects[numIntersections] = j;
+                 numIntersections++;
+             }
+             if (caps.y > 0.0) {
+                 intersections[numIntersections] = caps.y;
+                  xsObjects[numIntersections] = j;
+                  numIntersections++;
+             }
         } else if (objType == 3) {
             // There is supposed to be a way to optimize this for fewer checks by looking at early values.
             double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x);
