@@ -50,7 +50,9 @@ import (
 //	return objs
 //}
 
-func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
+func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle) {
+	triangles := make([]CLTriangle, 0)
+	triOffset := 0
 	objs := make([]CLObject, 0)
 	for i := range in {
 		obj := CLObject{}
@@ -76,17 +78,39 @@ func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
 			obj.Type = 4
 			obj.BBMin = in[i].(*shapes.Group).BoundingBox.Min
 			obj.BBMax = in[i].(*shapes.Group).BoundingBox.Max
+			// add any triangles to triangle list and keep track of offset and count
+			for j := range in[i].(*shapes.Group).Children {
+				o := in[i].(*shapes.Group).Children[j]
+				if tri, ok := o.(*shapes.Triangle); ok {
+					triangles = append(triangles, CLTriangle{
+						P1:      tri.P1,
+						P2:      tri.P2,
+						P3:      tri.P3,
+						E1:      tri.E1,
+						E2:      tri.E2,
+						N:       tri.N,
+						N1:      tri.N1,
+						N2:      tri.N2,
+						N3:      tri.N3,
+						Padding: [224]byte{},
+					})
+				}
+			}
+			obj.TriangleOffset = int32(triOffset)
+			obj.TriangleCount = int32(len(in[i].(*shapes.Group).Children))
+			triOffset += int(obj.TriangleCount)
 		default:
 			obj.Type = 999
 		}
-		// finally, pad with 32 bytes
+
 		obj.Reflectivity = in[i].GetMaterial().Reflectivity
-		obj.Padding2 = 0
+
+		// finally, pad!
 		obj.Padding3 = 0
 		obj.Padding4 = 0
 		obj.Padding5 = [448]byte{}
 
 		objs = append(objs, obj)
 	}
-	return objs
+	return objs, triangles
 }

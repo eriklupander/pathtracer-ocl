@@ -74,9 +74,10 @@ func (g *Group) GetMaterial() material.Material {
 }
 
 func (g *Group) SetMaterial(material material.Material) {
-	for _, c := range g.Children {
-		c.SetMaterial(material)
-	}
+	g.Material = material
+	//for _, c := range g.Children {
+	//	c.SetMaterial(material)
+	//}
 }
 
 //func (g *Group) IntersectLocal(ray geom.Ray) []Intersection {

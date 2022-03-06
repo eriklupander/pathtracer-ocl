@@ -98,11 +98,14 @@ func OCLScene() func() *Scene {
 		lightsource.SetMaterial(light)
 
 		// add two triangles to a group
-		tri1 := shapes.NewTriangleN(geom.NewPoint(-0.5, 0, 0), geom.NewPoint(0.5, 0, 0), geom.NewPoint(0, 1, 0))
-		tri2 := shapes.NewTriangleN(geom.NewPoint(-0.5, 1, 0), geom.NewPoint(0.5, 1, 0), geom.NewPoint(0, 1, 0))
-		tri3 := shapes.NewTriangleN(geom.NewPoint(-0.5, 1, 0), geom.NewPoint(0.5, 1, -1), geom.NewPoint(0, 1, 0))
+		tri1 := shapes.NewTriangleN(geom.NewPoint(-0.2, -.4, 0), geom.NewPoint(0.0, -.4, 0), geom.NewPoint(0, -0.1, 0))
+		tri2 := shapes.NewTriangleN(geom.NewPoint(0, -.4, 0), geom.NewPoint(0.2, -.4, 0), geom.NewPoint(0, -0.1, 0))
+		tri3 := shapes.NewTriangleN(geom.NewPoint(0.1, -.4, -0.4), geom.NewPoint(0,-0.1,0), geom.NewPoint(0, -.4, 0))
 
 		group := shapes.NewGroup()
+		group.SetMaterial(material.NewDiffuse(0.7, 0.4, 0.9))
+		group.SetTransform(geom.Translate(0.15, 0, -0.25))
+		//group.SetTransform(geom.RotateY(math.Pi / 4))
 		group.AddChildren(tri1, tri2, tri3)
 		group.Bounds()
 		fmt.Printf("%+v\n", group.BoundingBox)

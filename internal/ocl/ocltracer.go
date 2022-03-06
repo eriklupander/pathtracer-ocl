@@ -38,12 +38,26 @@ type CLObject struct {
 	MinY             float64
 	MaxY             float64
 	Reflectivity     float64
-	Padding2         int64
+	TriangleOffset   int32       // offset into triangles slice
+	TriangleCount    int32       // number of triangles
 	Padding3         int64
 	Padding4         int64
 	BBMin            [4]float64
 	BBMax            [4]float64
 	Padding5         [448]byte
+}
+
+type CLTriangle struct {
+	P1      [4]float64 // 32 bytes
+	P2      [4]float64 // 32 bytes
+	P3      [4]float64 // 32 bytes
+	E1      [4]float64 // 32 bytes (128)
+	E2      [4]float64 // 32 bytes
+	N       [4]float64 // 32 bytes (192)
+	N1      [4]float64 // 32 bytes
+	N2      [4]float64 // 32 bytes (256 here)
+	N3      [4]float64 // 32 bytes (288 here)
+	Padding [224]byte
 }
 
 type CLBoundingBox struct {
@@ -67,7 +81,7 @@ type CLCamera struct {
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(objects []CLObject, deviceIndex, height, samples int, camera CLCamera) []float64 {
+func Trace(objects []CLObject, triangles []CLTriangle, deviceIndex, height, samples int, camera CLCamera) []float64 {
 	numPixels := int(camera.Width * camera.Height)
 	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
 
@@ -162,14 +176,14 @@ func Trace(objects []CLObject, deviceIndex, height, samples int, camera CLCamera
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(objects, camera, context, kernel, queue, samples, workGroupSize, y, batchSize)...)
+		results = append(results, computeBatch(objects, triangles, camera, context, kernel, queue, samples, workGroupSize, y, batchSize)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results
 }
 
-func computeBatch(objects []CLObject, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int) []float64 {
+func computeBatch(objects []CLObject, triangles []CLTriangle, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int) []float64 {
 	pixelsInBatch := rowsPerBatch * int(camera.Width)
 
 	// populate seed of random numbers, OpenCL can't do random by itself AFAIK
@@ -189,6 +203,12 @@ func computeBatch(objects []CLObject, camera CLCamera, context *cl.Context, kern
 		logrus.Fatalf("CreateBuffer failed for objects input: %+v", err)
 	}
 	defer objectsBuffer.Release()
+
+	trianglesBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(triangles))
+	if err != nil {
+		logrus.Fatalf("CreateBuffer failed for triangles input: %+v", err)
+	}
+	defer trianglesBuffer.Release()
 
 	seedBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 8*len(seed))
 	if err != nil {
@@ -219,6 +239,12 @@ func computeBatch(objects []CLObject, camera CLCamera, context *cl.Context, kern
 		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
 	}
 
+	trianglesDataPtr := unsafe.Pointer(&triangles[0])
+	trianglesDataSize := int(unsafe.Sizeof(triangles[0])) * len(triangles)
+	if _, err := queue.EnqueueWriteBuffer(trianglesBuffer, true, 0, trianglesDataSize, trianglesDataPtr, nil); err != nil {
+		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+	}
+
 	seedDataPtr := unsafe.Pointer(&seed[0])
 	seedDataSize := int(unsafe.Sizeof(seed[0])) * len(seed)
 	if _, err := queue.EnqueueWriteBuffer(seedBuffer, true, 0, seedDataSize, seedDataPtr, nil); err != nil {
@@ -232,7 +258,7 @@ func computeBatch(objects []CLObject, camera CLCamera, context *cl.Context, kern
 	}
 
 	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
-	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset)); err != nil {
+	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset)); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 

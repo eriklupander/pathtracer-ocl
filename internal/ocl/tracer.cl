@@ -1,16 +1,15 @@
 __constant double PI = 3.14159265359f;
 __constant unsigned int MAX_BOUNCES = 4;
 
-typedef struct __attribute__((packed)) tag_camera { // Total: 256 + 40 + 16 == 312
-    int width;     // 4 bytes
-    int height;    // 4 bytes
+typedef struct __attribute__((packed)) tag_camera {
+    int width;              // 4 bytes
+    int height;             // 4 bytes
     double fov;             // 8 bytes
     double pixelSize;       // 8 bytes
     double halfWidth;       // 8 bytes
     double halfHeight;      // 8 bytes
     double aperture;        // 8 bytes
     double focalLength;     // 8 bytes
-    //double16 transform;     // 128 bytes
     double16 inverse;       // 128 bytes
     char padding[72];       // 72 bytes
 } camera;
@@ -31,7 +30,8 @@ typedef struct __attribute__((packed)) tag_object {
   double minY;               // 8 bytes. Used for cylinders.
   double maxY;               // 8 bytes. Used for cylinders.
   double reflectivity;       // 8 bytes
-  double padding2;           // 8 bytes
+  int triangleOffset;        // 4 bytes. Used for groups.
+  int triangleCount;         // 4 bytes. Used for groups.
   double padding3;           // 8 bytes
   double padding4;           // 8 bytes                      // 512
   double4 bbMin;             // 32 bytes
@@ -54,7 +54,7 @@ typedef struct tag_bounce {
   // refractiveIndex float64
 } bounce;
 
-typedef struct tag_triangle {
+typedef struct __attribute__((packed)) tag_triangle {
     double4 p1;       // 32 bytes
     double4 p2;       // 32 bytes
     double4 p3;       // 32 bytes
@@ -64,7 +64,7 @@ typedef struct tag_triangle {
     double4 n1;       // 32 bytes
     double4 n2;       // 32 bytes
     double4 n3;       // 32 bytes
-    uint8 padding[224];// 224 bytes
+    char padding[224];// 224 bytes
 } triangle;           // 512 total
 
 inline double maxX(double a, double b, double c) {
@@ -222,13 +222,28 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
 
 
 __kernel void trace(__global object *objects,
-                    const unsigned int numObjects, __global double *output,
-                    __global double *seedX, const unsigned int samples, __global camera *cam, const unsigned int yOffset) {
+                    const unsigned int numObjects,
+                    __global triangle *triangles,
+                    __global double *output,
+                    __global double *seedX,
+                    const unsigned int samples,
+                    __global camera *cam,
+                    const unsigned int yOffset) {
+
+  //int skipped = 0;
+  //int hit = 0;
   double colorWeight = 1.0 / samples;
   int i = get_global_id(0);
   float fgi = seedX[i] / numObjects;
   float fgi2 = seedX[i] / samples;
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
+
+//  for (int a=0;a<3;a++) {
+//    triangle tri = triangles[a];
+//    printf("%d: P1: %f %f %f\n", a, tri.p1.x, tri.p1.y, tri.p1.z);
+//    printf("%d: P2: %f %f %f\n", a, tri.p2.x, tri.p2.y, tri.p2.z);
+//    printf("%d: P3: %f %f %f\n", a, tri.p3.x, tri.p3.y, tri.p3.z);
+//  }
 
   double4 colors = (double4)(0, 0, 0, 0);
 
@@ -248,10 +263,10 @@ __kernel void trace(__global object *objects,
     bounce bounces[5] = {};
     for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
 
-      // track up to 8 intersections per ray.
-      double intersections[8] = {0};  // t of an intersection
-      unsigned int xsObjects[8] = {0}; // index maps to each xs above, value to objects
-
+      // track up to 16 intersections per ray.
+      double intersections[16] = {0};  // t of an intersection
+      unsigned int xsObjects[16] = {0}; // index maps to each xs above, value to objects
+      double4 xsTriangle[16] = {0};
       // ----------------------------------------------------------
       // Loop through scene objects in order to find intersections
       // ----------------------------------------------------------
@@ -372,7 +387,7 @@ __kernel void trace(__global object *objects,
                 continue;
             }
 
-            // assign interesections
+            // assign intersections
             intersections[numIntersections] = tmin;
             xsObjects[numIntersections] = j;
             numIntersections++;
@@ -386,36 +401,43 @@ __kernel void trace(__global object *objects,
             // Remember: At this point in the code, the group's transform has already modified the ray.
             // However, the cube intersection is based on transform/rotate/scale to unit cube. Our BB does not
             // really work that way...
+            // Note!! BB must have extent in all 3-axises. I.e two triangles forming a wall facing the Z axis will have 0
+            // depth which breaks the intersect code. (typically, use this for models that's rarely flat, or fake something if 0.)
             if (!intersectRayWithBox(tRayOrigin, tRayDirection, objects[j].bbMin, objects[j].bbMax)) {
-               // printf("skipped group due to not intersecting BB\n");
+                // printf("skipped group due to not intersecting BB\n");
+                //skipped++;
                 continue;
             }
+            //hit++;
+            for (int n = objects[j].triangleOffset;n < objects[j].triangleOffset+objects[j].triangleCount;n++) {
 
-//            triangle tri = triangles[n];
-//            double4 dirCrossE2 = cross(tRayDirection, tri.e2);
-//            double determinant = dot(tri.e1, dirCrossE2);
-//            if (fabs(determinant) < 0.0001) {
-//                continue;
-//            }
-//
-//            // Triangle misses over P1-P3 edge
-//            double f = 1.0 / determinant;
-//            double4 p1ToOrigin = tRayOrigin - tri.p1;
-//            double u = f * dot(p1ToOrigin, dirCrossE2);
-//            if (u < 0 || u > 1) {
-//                continue;
-//            }
-//
-//            double4 originCrossE1 = cross(p1ToOrigin, tri.e1);
-//            double v = f * dot(tRayDirection, originCrossE1);
-//            if (v < 0 || (u+v) > 1) {
-//                continue;
-//            }
-//            double tdist = f * dot(tri.e2, originCrossE1);
-//            intersections[numIntersections] = tdist;
-//            xsObjects[numIntersections] = j;
-//            xsTriangle[numIntersections] = tri.n;
-//            numIntersections++;
+                double4 dirCrossE2 = cross(tRayDirection, triangles[n].e2);
+                double determinant = dot(triangles[n].e1, dirCrossE2);
+                if (fabs(determinant) < 0.0001) {
+                    continue;
+                }
+
+                // Triangle misses over P1-P3 edge
+                double f = 1.0 / determinant;
+                double4 p1ToOrigin = tRayOrigin - triangles[n].p1;
+                double u = f * dot(p1ToOrigin, dirCrossE2);
+                if (u < 0 || u > 1) {
+                    continue;
+                }
+
+                double4 originCrossE1 = cross(p1ToOrigin, triangles[n].e1);
+                double v = f * dot(tRayDirection, originCrossE1);
+                if (v < 0 || (u+v) > 1) {
+                    continue;
+                }
+
+                intersections[numIntersections] = f * dot(triangles[n].e2, originCrossE1);;
+                xsObjects[numIntersections] = j;
+                xsTriangle[j] = (double4)(triangles[n].n.x, triangles[n].n.y, triangles[n].n.z, 0.0);
+               // printf("intersected tri %d\n", n); //: %f %f %f\n", tri.n[0], tri.n[1], tri.n[2]);
+                numIntersections++;
+                //continue;
+            }
         }
       }
 
@@ -478,6 +500,10 @@ __kernel void trace(__global object *objects,
             } else {
                 objectNormal = (double4) (0.0, 0.0, localPoint.z, 0.0);
             }
+        } else if (obj.type == 4) {
+            // GROUP, which in practice means a triangle, whose normal is typically pre-populated in N and stored in xsTriangles
+            objectNormal = xsTriangle[lowestIntersectionIndex];
+            //printf("object normal: %f %f %f\n", objectNormal.x, objectNormal.y, objectNormal.z);
         }
         // Finish the normal vector by multiplying it back into world coord
         // using the inverse transpose matrix and then normalize it
@@ -556,4 +582,6 @@ __kernel void trace(__global object *objects,
   output[i * 4 + 1] = colors.y * colorWeight;
   output[i * 4 + 2] = colors.z * colorWeight;
   output[i * 4 + 3] = 1.0;
+
+  //printf("%d rays missing the BB, %d hits\n", skipped, hit);
 }
