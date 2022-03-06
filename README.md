@@ -49,4 +49,13 @@ For this _reference image_ at 1280x960:
 The current DoF has some issues producing slight artifacts, probably due to how random numbers are seeded for the aperture-based ray origin.
 
 ## Gallery
+#### Depth of Field
+1280x960, 2048 samples, focal length 1.6, aperture 0.15.
 ![DoF](images/DoF-2048.png)
+
+#### Anti-aliasing
+Without anti-aliasing:
+![noaa](images/no-aa.png)
+
+With anti-aliasing:
+![noaa](images/aa.png)
