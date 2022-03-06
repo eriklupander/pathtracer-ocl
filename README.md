@@ -20,6 +20,25 @@ Based on or inspired by:
 * Ray in hemisphere code by Hunter Loftis at https://github.com/hunterloftis/pbr/blob/1ce8b1c067eea7cf7298745d6976ba72ff12dd50/pkg/geom/dir.go
 * And my own mashup of the three above, a simple and Go-native path-tracer https://github.com/eriklupander/pathtracer
 
+Next steps:
+* Groups of primitives, with bounding boxes
+* Triangle primitives
+* .obj model loading into bounding volume hierarchies 
+* Rendering models
+
+All of the above is present in my Go-only ray-tracer, but given that recursion is forbidden in OpenCL, as well as variable-length arrays cannot be passed to OpenCL without careful management of struct sizes, "numberOfNN" fields etc, incorporating 3D model rendering with acceptable performance is non-trivial.
+
+The overall solution is _probably_ to:
+* Pass ALL triangles (for all models) in a long continous array, each triangle will have pre-computed vertex/surface normals etc and consume 256 or 512 bytes each.
+* Organize models into a BVH hierarchy of groups. 
+  * All groups goes into a contingous array of groups.
+  * Each group has a bounding box
+  * Each group has a int[16] array for indexes to subgroups
+  * Each group has two fields: trianglesOffset and trianglesSize, these are used to reference into the `triangles` array. I.e. in "go terms", `triangles[trianglesOffset:trianglesOffset+trianglesSize]`.
+* A challenge here is that traversing the BVH must be done using for-loops and a local "stack" rather than recursion.
+  * Also, since each "subgroup" may have its own "subtranslation" in relation to its parent, we may need to keep a stack of translations around as well.
+    * It may be possible to let each group within a group (forming a mesh) to have an absolute world-based transform rather than one in relation to its parent.
+
 ## Usage
 A few command-line args have been added to simplify testing things.
 
