@@ -37,12 +37,12 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 	sceneData := ocl.BuildSceneBufferCL(ctx.scene.Objects)
 
 	clCamera := ocl.CLCamera{
-		Width:      int32(ctx.camera.Width),
-		Height:     int32(ctx.camera.Height),
-		Fov:        ctx.camera.Fov,
-		PixelSize:  ctx.camera.PixelSize,
-		HalfWidth:  ctx.camera.HalfWidth,
-		HalfHeight: ctx.camera.HalfHeight,
+		Width:       int32(ctx.camera.Width),
+		Height:      int32(ctx.camera.Height),
+		Fov:         ctx.camera.Fov,
+		PixelSize:   ctx.camera.PixelSize,
+		HalfWidth:   ctx.camera.HalfWidth,
+		HalfHeight:  ctx.camera.HalfHeight,
 		Aperture:    ctx.camera.Aperture,
 		FocalLength: ctx.camera.FocalLength,
 		//Transform:   ctx.camera.Transform,

@@ -44,12 +44,12 @@ type CLObject struct {
 }
 
 type CLCamera struct {
-	Width      int32   // 4
-	Height     int32   // 8
-	Fov        float64 // 16
-	PixelSize  float64 // 24
-	HalfWidth  float64 // 32
-	HalfHeight float64 // 40
+	Width       int32   // 4
+	Height      int32   // 8
+	Fov         float64 // 16
+	PixelSize   float64 // 24
+	HalfWidth   float64 // 32
+	HalfHeight  float64 // 40
 	Aperture    float64 // 48
 	FocalLength float64 // 56
 	//Transform   [16]float64

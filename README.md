@@ -49,16 +49,18 @@ For this _reference image_ at 1280x960:
 The current DoF has some issues producing slight artifacts, probably due to how random numbers are seeded for the aperture-based ray origin.
 
 ## Gallery
-#### Depth of Field
+### Depth of Field
+Depth-of-field effect is accomplished through casting a standard camera->pixel ray into the scene, and then creating a new "focal point" by using focal distance (distance to a point along camera ray). A new random origin point is then randomly picked around the camera origin with r==aperture and a _new_ ray is cast from the new camera through the focal point, resulting in objects not near the focal point to appear increasingly out-of focus.
+
 1280x960, 2048 samples, focal length 1.6, aperture 0.15.
 ![DoF](images/DoF-2048.png)
 
-#### Anti-aliasing
+### Anti-aliasing
 Anti-aliasing is accomplished through the age-old trick of casting each ray through a random location in the pixel. Given enough samples, an anti-aliased effect will occurr.
 
 Examples rendered in 640x480 with 512 samples:
-##### Without anti-aliasing:
+#### Without anti-aliasing:
 ![noaa](images/no-aa.png)
 
-##### With anti-aliasing:
+#### With anti-aliasing:
 ![noaa](images/aa.png)
