@@ -100,8 +100,10 @@ func OCLScene() func() *Scene {
 		// add two triangles to a group
 		tri1 := shapes.NewTriangleN(geom.NewPoint(-0.5, 0, 0), geom.NewPoint(0.5, 0, 0), geom.NewPoint(0, 1, 0))
 		tri2 := shapes.NewTriangleN(geom.NewPoint(-0.5, 1, 0), geom.NewPoint(0.5, 1, 0), geom.NewPoint(0, 1, 0))
+		tri3 := shapes.NewTriangleN(geom.NewPoint(-0.5, 1, 0), geom.NewPoint(0.5, 1, -1), geom.NewPoint(0, 1, 0))
+
 		group := shapes.NewGroup()
-		group.AddChildren(tri1, tri2)
+		group.AddChildren(tri1, tri2, tri3)
 		group.Bounds()
 		fmt.Printf("%+v\n", group.BoundingBox)
 		return &Scene{

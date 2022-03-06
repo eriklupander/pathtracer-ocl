@@ -74,10 +74,10 @@ inline double minX(double a, double b, double c) {
     return min(min(a, b), c);
 }
 
-inline double2 checkAxis(double origin, double direction) {
+inline double2 checkAxis(double origin, double direction, double minBB, double maxBB) {
     double2 out = (double2){0,0};
-    double tminNumerator = -1.0 - origin;
-    double tmaxNumerator = 1.0 - origin;
+    double tminNumerator = minBB - origin; //-1.0 - origin;
+    double tmaxNumerator = maxBB - origin; //1.0 - origin;
     if (fabs(direction) >= 0.0001) {
       out.x = tminNumerator / direction;
       out.y = tmaxNumerator / direction;
@@ -92,6 +92,19 @@ inline double2 checkAxis(double origin, double direction) {
       out.y = temp;
     }
     return out;
+}
+
+inline bool intersectRayWithBox(double4 tRayOrigin, double4 tRayDirection, double4 bbMin, double4 bbMax) {
+	// There is supposed  to be a way to optimize this for fewer checks by looking at early values.
+	double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x, bbMin.x, bbMax.x);
+    double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y, bbMin.y, bbMax.y);
+    double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z, bbMin.z, bbMax.z);
+
+    // We use double2 as a poor-mans multi-valued return.
+    // If the largest of the min values is greater smallest max value...
+    double tmin = maxX(xt.x, yt.x, zt.x); // x == min
+    double tmax = minX(xt.y, yt.y, zt.y); // y == max
+	return tmin < tmax;
 }
 
 inline bool checkCap(double4 origin, double4 direction, double t) {
@@ -347,9 +360,9 @@ __kernel void trace(__global object *objects,
              }
         } else if (objType == 3) {
             // There is supposed to be a way to optimize this for fewer checks by looking at early values.
-            double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x);
-            double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y);
-            double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z);
+            double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x, -1.0, 1.0);
+            double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y, -1.0, 1.0);
+            double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z, -1.0, 1.0);
 
             // Om det största av min-värdena är större än det minsta max-värdet.
             double tmin = maxX(xt.x, yt.x, zt.x);
@@ -368,7 +381,16 @@ __kernel void trace(__global object *objects,
             xsObjects[numIntersections] = j;
             numIntersections++;
         } else if (objType == 4) {
-            // Mesh with triangles experiment
+            // Group with triangles experiment
+            // Groups MUST have their bounds computed. Start by checking if ray intersects bounds.
+            // Remember: At this point in the code, the group's transform has already modified the ray.
+            // However, the cube intersection is based on transform/rotate/scale to unit cube. Our BB does not
+            // really work that way...
+            if (!intersectRayWithBox(tRayOrigin, tRayDirection, objects[j].bbMin, objects[j].bbMax)) {
+               // printf("skipped group due to not intersecting BB\n");
+                continue;
+            }
+
 //            triangle tri = triangles[n];
 //            double4 dirCrossE2 = cross(tRayDirection, tri.e2);
 //            double determinant = dot(tri.e1, dirCrossE2);
