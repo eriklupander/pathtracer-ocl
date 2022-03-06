@@ -54,8 +54,11 @@ The current DoF has some issues producing slight artifacts, probably due to how 
 ![DoF](images/DoF-2048.png)
 
 #### Anti-aliasing
-Without anti-aliasing:
+Anti-aliasing is accomplished through the age-old trick of casting each ray through a random location in the pixel. Given enough samples, an anti-aliased effect will occurr.
+
+Examples rendered in 640x480 with 512 samples:
+##### Without anti-aliasing:
 ![noaa](images/no-aa.png)
 
-With anti-aliasing:
+##### With anti-aliasing:
 ![noaa](images/aa.png)
