@@ -29,6 +29,8 @@ A few command-line args have been added to simplify testing things.
       --samples int          Number of samples per pixel (default 1)
       --aperture float       Aperture. If 0, no DoF will be used. Default: 0
       --focal-length float   Focal length. Default: 0
+      --device-index int     Use device with index (use --list-devices to list available devices)
+      --list-devices         List available devices
 ```
 Suggested values for focal length and aperture for the standard cornell box: 1.6 and 0.1
 
@@ -37,13 +39,35 @@ Example:
 go run cmd/pt/main.go --samples 2048 --aperture 0.15 --focal-length 1.6 --width 1280 --height 960
 ```
 
+### Listing and selecting a device
+Not all OpenCL devices are created equal. On the author's semi-ancient MacBook Pro 2014, running `go run cmd/pt/main.go --list-devices` yields:
+```shell
+Index: 0 Type: CPU Name: Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+Index: 1 Type: GPU Name: Iris Pro
+Index: 2 Type: GPU Name: GeForce GT 750M
+```
+However, the Iris Pro iGPU does not support double-precision floating point numbers. Also, there are subtle differences between CPU and GPU device, which in certain situations may result in panics or segmentation faults. In other words: Your milage may vary. CPU-based devices seems to be the most stable and on MacBooks, CPU has significantly better performance than the discrete GPUs.
+
 ## Performance
 For this _reference image_ at 1280x960:
 ![example](images/reference.png)
 
-### MacBook Pro mid-2014:
+### MacBook Pro mid-2014
 * Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz:  10m45.813990173s
 * GeForce GT 750M GPU:                        14m12.049519483s
+
+### MacBook Pro 2019
+* Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz:     4m20.568928052s
+* AMD Radeon Pro 560X Compute Engine:           5m14.439406471s
+
+### Desktop PC with Windows 10 - Ryzen 2600X
+* NVIDIA GeForce RTX 2080:                      45.4309853s
+
+_(AMD has dropped Ryzen CPU OpenCL support on Windows)_
+
+In this scenario, the 8-core Core i9 CPU is more than twice as fast as the 4-cire Core i7 CPU on the older MacBook. Both mGPUs are slower than their respective CPUs.
+
+The king is unsurprisingly enough the GeForce RTX 2080 on my Desktop PC, which is almost 6x faster than the 8-core Intel CPU.
 
 ## Issues
 The current DoF has some issues producing slight artifacts, probably due to how random numbers are seeded for the aperture-based ray origin.
