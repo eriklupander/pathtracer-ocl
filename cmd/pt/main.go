@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"github.com/sirupsen/logrus"
 	"math/rand"
 	"os"
 	"time"
@@ -8,6 +10,7 @@ import (
 	"github.com/eriklupander/pathtracer-ocl/cmd"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/scenes"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/tracer"
+	"github.com/jgillich/go-opencl/cl"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -25,6 +28,8 @@ func main() {
 	configFlags.Float64("aperture", 0.0, "Aperture. If 0, no DoF will be used")
 	configFlags.Float64("focal-length", 0.0, "Focal length.")
 	configFlags.String("scene", "reference", "scene from /scenes")
+	configFlags.Int("device-index", 0, "Use device with index (use --list-devices to list available devices)")
+	configFlags.Bool("list-devices", false, "List available devices")
 
 	if err := configFlags.Parse(os.Args[1:]); err != nil {
 		panic(err.Error())
@@ -36,7 +41,28 @@ func main() {
 
 	cmd.FromConfig()
 
+	if cmd.Cfg.ListDevices {
+		listDevices()
+		return
+	}
+
 	var scene = scenes.OCLScene()
 
 	tracer.Render(scene)
+}
+
+func listDevices() {
+	platforms, err := cl.GetPlatforms()
+	if err != nil {
+		logrus.Fatalf("Failed to get platforms: %+v", err)
+	}
+	platform := platforms[0]
+
+	devices, err := platform.GetDevices(cl.DeviceTypeAll)
+	if err != nil {
+		logrus.Fatalf("Failed to get devices: %+v", err)
+	}
+	for idx, device := range devices {
+		fmt.Printf("Index: %d Type: %s Name: %s\n", idx, device.Type(), device.Name())
+	}
 }

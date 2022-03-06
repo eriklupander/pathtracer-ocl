@@ -59,7 +59,7 @@ type CLCamera struct {
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(objects []CLObject, width, height, samples int, camera CLCamera) []float64 {
+func Trace(objects []CLObject, deviceIndex, height, samples int, camera CLCamera) []float64 {
 	numPixels := int(camera.Width * camera.Height)
 	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
 
@@ -76,9 +76,9 @@ func Trace(objects []CLObject, width, height, samples int, camera CLCamera) []fl
 	if len(devices) == 0 {
 		logrus.Fatalf("GetDevices returned no devices")
 	}
-	// Use the "highest" device index, is usually the discrete GPU
-	deviceIndex := 0 //len(devices) - 1
-
+	if deviceIndex > len(devices)-1 {
+		logrus.Fatalf("device index %d out of bounds: highest device index: %d", deviceIndex, len(devices)-1)
+	}
 	if deviceIndex < 0 {
 		deviceIndex = 0
 	}

@@ -1,6 +1,7 @@
 package tracer
 
 import (
+	"github.com/eriklupander/pathtracer-ocl/cmd"
 	"math/rand"
 	"time"
 
@@ -51,7 +52,7 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 	}
 
 	// Render the scene
-	result := ocl.Trace(sceneData, width, height, ctx.samples, clCamera)
+	result := ocl.Trace(sceneData, cmd.Cfg.DeviceIndex, height, ctx.samples, clCamera)
 
 	// result now contains RGBA values for each pixel,
 	j := 0

@@ -9,6 +9,8 @@ type Config struct {
 	Samples     int
 	Aperture    float64
 	FocalLength float64
+	DeviceIndex int
+	ListDevices bool
 }
 
 var Cfg *Config
@@ -20,5 +22,7 @@ func FromConfig() {
 		Samples:     viper.GetInt("samples"),
 		Aperture:    viper.GetFloat64("aperture"),
 		FocalLength: viper.GetFloat64("focal-length"),
+		DeviceIndex: viper.GetInt("device-index"),
+		ListDevices: viper.GetBool("list-devices"),
 	}
 }
