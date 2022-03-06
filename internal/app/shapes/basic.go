@@ -24,3 +24,23 @@ type Basic struct {
 	InverseTranspose geom.Mat4x4
 	Material         material.Material
 }
+
+func max(values ...float64) float64 {
+	c := values[0]
+	for i := 1; i < len(values); i++ {
+		if values[i] > c {
+			c = values[i]
+		}
+	}
+	return c
+}
+
+func min(values ...float64) float64 {
+	c := values[0]
+	for i := 1; i < len(values); i++ {
+		if values[i] < c {
+			c = values[i]
+		}
+	}
+	return c
+}

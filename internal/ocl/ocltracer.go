@@ -41,6 +41,14 @@ type CLObject struct {
 	Padding2         int64
 	Padding3         int64
 	Padding4         int64
+	BBMin            [4]float64
+	BBMax            [4]float64
+	Padding5         [448]byte
+}
+
+type CLBoundingBox struct {
+	Min [4]float64 // 32 bytes
+	Max [4]float64 // 32 bytes
 }
 
 type CLCamera struct {
@@ -173,10 +181,10 @@ func computeBatch(objects []CLObject, camera CLCamera, context *cl.Context, kern
 	// 5. Time to start loading data into GPU memory
 
 	// 5.1 create OpenCL buffers (memory) for the pre-computed rays and scene objects.
-	// Note that we're allocating 64 bytes per ray (8xfloat64) and 512 bytes per scene object.
+	// Note that we're allocating 64 bytes per ray (8xfloat64) and 1024 bytes per scene object.
 	// Remember - each float64 uses 8 bytes.
 
-	objectsBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(objects))
+	objectsBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 1024*len(objects))
 	if err != nil {
 		logrus.Fatalf("CreateBuffer failed for objects input: %+v", err)
 	}

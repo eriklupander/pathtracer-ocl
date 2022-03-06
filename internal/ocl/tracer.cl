@@ -33,7 +33,10 @@ typedef struct __attribute__((packed)) tag_object {
   double reflectivity;       // 8 bytes
   double padding2;           // 8 bytes
   double padding3;           // 8 bytes
-  double padding4;           // 8 bytes
+  double padding4;           // 8 bytes                      // 512
+  double4 bbMin;             // 32 bytes
+  double4 bbMax;             // 32 bytes                     // 576
+  char padding5[448];        // 448 bytes                    // 1024
 } object;
 
 typedef struct tag_intersection {
@@ -50,6 +53,19 @@ typedef struct tag_bounce {
   // diffuse         bool
   // refractiveIndex float64
 } bounce;
+
+typedef struct tag_triangle {
+    double4 p1;       // 32 bytes
+    double4 p2;       // 32 bytes
+    double4 p3;       // 32 bytes
+    double4 e1;       // 32 bytes
+    double4 e2;       // 32 bytes
+    double4 n;        // 32 bytes
+    double4 n1;       // 32 bytes
+    double4 n2;       // 32 bytes
+    double4 n3;       // 32 bytes
+    uint8 padding[224];// 224 bytes
+} triangle;           // 512 total
 
 inline double maxX(double a, double b, double c) {
     return max(max(a, b), c);
@@ -351,6 +367,33 @@ __kernel void trace(__global object *objects,
             intersections[numIntersections] = tmax;
             xsObjects[numIntersections] = j;
             numIntersections++;
+        } else if (objType == 4) {
+            // Mesh with triangles experiment
+//            triangle tri = triangles[n];
+//            double4 dirCrossE2 = cross(tRayDirection, tri.e2);
+//            double determinant = dot(tri.e1, dirCrossE2);
+//            if (fabs(determinant) < 0.0001) {
+//                continue;
+//            }
+//
+//            // Triangle misses over P1-P3 edge
+//            double f = 1.0 / determinant;
+//            double4 p1ToOrigin = tRayOrigin - tri.p1;
+//            double u = f * dot(p1ToOrigin, dirCrossE2);
+//            if (u < 0 || u > 1) {
+//                continue;
+//            }
+//
+//            double4 originCrossE1 = cross(p1ToOrigin, tri.e1);
+//            double v = f * dot(tRayDirection, originCrossE1);
+//            if (v < 0 || (u+v) > 1) {
+//                continue;
+//            }
+//            double tdist = f * dot(tri.e2, originCrossE1);
+//            intersections[numIntersections] = tdist;
+//            xsObjects[numIntersections] = j;
+//            xsTriangle[numIntersections] = tri.n;
+//            numIntersections++;
         }
       }
 

@@ -72,6 +72,10 @@ func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
 			obj.MaxY = in[i].(*shapes.Cylinder).MaxY
 		case *shapes.Cube:
 			obj.Type = 3
+		case *shapes.Group:
+			obj.Type = 4
+			obj.BBMin = in[i].(*shapes.Group).BoundingBox.Min
+			obj.BBMax = in[i].(*shapes.Group).BoundingBox.Max
 		default:
 			obj.Type = 999
 		}
@@ -80,6 +84,7 @@ func BuildSceneBufferCL(in []shapes.Shape) []CLObject {
 		obj.Padding2 = 0
 		obj.Padding3 = 0
 		obj.Padding4 = 0
+		obj.Padding5 = [448]byte{}
 
 		objs = append(objs, obj)
 	}

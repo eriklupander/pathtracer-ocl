@@ -11,3 +11,8 @@ type Ray struct {
 	Origin    Tuple4
 	Direction Tuple4
 }
+
+func TransformRayPtr(r Ray, m1 Mat4x4, out *Ray) {
+	MultiplyByTuplePtr(&m1, &r.Origin, &out.Origin)
+	MultiplyByTuplePtr(&m1, &r.Direction, &out.Direction)
+}

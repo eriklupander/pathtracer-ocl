@@ -1,6 +1,7 @@
 package scenes
 
 import (
+	"fmt"
 	"github.com/eriklupander/pathtracer-ocl/cmd"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/camera"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
@@ -96,9 +97,16 @@ func OCLScene() func() *Scene {
 		light.Emission = geom.NewColor(9, 8, 6)
 		lightsource.SetMaterial(light)
 
+		// add two triangles to a group
+		tri1 := shapes.NewTriangleN(geom.NewPoint(-0.5, 0, 0), geom.NewPoint(0.5, 0, 0), geom.NewPoint(0, 1, 0))
+		tri2 := shapes.NewTriangleN(geom.NewPoint(-0.5, 1, 0), geom.NewPoint(0.5, 1, 0), geom.NewPoint(0, 1, 0))
+		group := shapes.NewGroup()
+		group.AddChildren(tri1, tri2)
+		group.Bounds()
+		fmt.Printf("%+v\n", group.BoundingBox)
 		return &Scene{
 			Camera:  cam,
-			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, cube, lightsource},
+			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, cyl, cube, group, lightsource},
 		}
 	}
 }
