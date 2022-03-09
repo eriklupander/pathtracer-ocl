@@ -430,13 +430,19 @@ __kernel void trace(__global object *objects,
                 if (v < 0 || (u+v) > 1) {
                     continue;
                 }
-
-                intersections[numIntersections] = f * dot(triangles[n].e2, originCrossE1);;
+                double t = f * dot(triangles[n].e2, originCrossE1);
+                intersections[numIntersections] = t;
                 xsObjects[numIntersections] = j;
-                xsTriangle[j] = (double4)(triangles[n].n.x, triangles[n].n.y, triangles[n].n.z, 0.0);
-               // printf("intersected tri %d\n", n); //: %f %f %f\n", tri.n[0], tri.n[1], tri.n[2]);
+
+                // assume we have vertex normals. If not, assume N in n1,n2,n3
+                // stored the computed normal in a list using the same indexing as xsObjects so
+                // if a ray intersects several triangles in the group, we'll get an intersection per triangle
+                // but can separate their normals and then only use the one for the nearest intersection
+                xsTriangle[numIntersections] = triangles[n].n2 * u +
+                                triangles[n].n3 * v +
+                                triangles[n].n1  * (1.0-u-v);
+
                 numIntersections++;
-                //continue;
             }
         }
       }
@@ -444,11 +450,13 @@ __kernel void trace(__global object *objects,
       // find lowest positive intersection index
       double lowestIntersectionT = 1024.0;
       int lowestIntersectionIndex = -1;
+      int normalIndex = -1;
       for (unsigned int x = 0; x < numIntersections; x++) {
         if (intersections[x] > 0.0001) {
           if (intersections[x] < lowestIntersectionT) {
             lowestIntersectionT = intersections[x];
             lowestIntersectionIndex = xsObjects[x];
+            normalIndex = x;                          // while only used for triangles, we track computed normal by x.
           }
         }
       }
@@ -466,7 +474,7 @@ __kernel void trace(__global object *objects,
 
         // object normal at intersection: Transform point from world to object
         // space
-        double4 localPoint = mul(obj.inverse, position);
+
         double4 objectNormal;
 
         // PLANE always have its normal UP in local space
@@ -475,10 +483,12 @@ __kernel void trace(__global object *objects,
         } else if (obj.type == 1) {
           // SPHERE always has its normal from sphere center outwards to the
           // world position.
+           double4 localPoint = mul(obj.inverse, position);
           objectNormal = localPoint - originPoint;
         } else if (obj.type == 2) {
             // CYLINDER
             // compute the square of the distance from the y axis
+             double4 localPoint = mul(obj.inverse, position);
             double dist = pow(localPoint.x, 2) + pow(localPoint.z, 2);
             if (dist < 1 && localPoint.y >= obj.maxY - 0.0001) {
                 objectNormal = (double4)(0.0, 1.0, 0.0, 0.0);
@@ -492,6 +502,7 @@ __kernel void trace(__global object *objects,
             // NormalAtLocal for a cube uses the fact that given a unit cube, the point of the surface axis X,Y or Z is
             // always either 1.0 for positive XYZ and -1.0 for negative XYZ. I.e - if the point is 0.4, 1, -0.5,
             // we know that the point is on the top Y surface and we can return a 0,1,0 normal.
+             double4 localPoint = mul(obj.inverse, position);
             double maxc = maxX(fabs(localPoint.x), fabs(localPoint.y), fabs(localPoint.z));
             if (maxc == fabs(localPoint.x)) {
                 objectNormal = (double4)(localPoint.x, 0.0, 0.0, 0.0);
@@ -502,7 +513,7 @@ __kernel void trace(__global object *objects,
             }
         } else if (obj.type == 4) {
             // GROUP, which in practice means a triangle, whose normal is typically pre-populated in N and stored in xsTriangles
-            objectNormal = xsTriangle[lowestIntersectionIndex];
+            objectNormal = xsTriangle[normalIndex];
             //printf("object normal: %f %f %f\n", objectNormal.x, objectNormal.y, objectNormal.z);
         }
         // Finish the normal vector by multiplying it back into world coord

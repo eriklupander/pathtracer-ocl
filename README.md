@@ -12,6 +12,7 @@ Supports:
 * Movable camera
 * Anti-aliasing
 * Depth of Field with simple focal length and camera aperture.
+* .OBJ model loading and rendering, incl computing vertex normals. Each model goes into one bounding box, so not efficient.
 
 Based on or inspired by:
 
@@ -92,6 +93,10 @@ The king is unsurprisingly enough the GeForce RTX 2080 on my Desktop PC, which i
 The current DoF has some issues producing slight artifacts, probably due to how random numbers are seeded for the aperture-based ray origin.
 
 ## Gallery
+### Teapot
+The classic. Here a low-res (640x480) low sample (256) render:
+![Teapot](images/teapot2.png)
+
 ### Depth of Field
 Depth-of-field effect is accomplished through casting a standard camera->pixel ray into the scene, and then creating a new "focal point" by using focal distance (distance to a point along camera ray). A new random origin point is then randomly picked around the camera origin with r==aperture and a _new_ ray is cast from the new camera through the focal point, resulting in objects not near the focal point to appear increasingly out-of focus.
 

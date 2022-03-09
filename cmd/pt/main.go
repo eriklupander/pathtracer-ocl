@@ -46,7 +46,13 @@ func main() {
 		return
 	}
 
-	var scene = scenes.OCLScene()
+	var scene func() *scenes.Scene
+	switch cmd.Cfg.Scene {
+	case "teapot":
+		scene = scenes.ModelScene()
+	default:
+		scene = scenes.OCLScene()
+	}
 
 	tracer.Render(scene)
 }

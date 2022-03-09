@@ -41,6 +41,29 @@ func NewTriangleN(p1 geom.Tuple4, p2 geom.Tuple4, p3 geom.Tuple4) *Triangle {
 	}
 }
 
+func NewTriangle3P(p1 geom.Tuple4, p2 geom.Tuple4, p3 geom.Tuple4) *Triangle {
+
+	e1 := geom.Sub(p2, p1)
+	e2 := geom.Sub(p3, p1)
+	n := geom.Normalize(geom.Cross(e2, e1))
+
+	// for barycentric
+	//d00 := Dot(e1, e1)
+	//d01 := Dot(e1, e2)
+	//d11 := Dot(e2, e2)
+	//denom := d00*d11 - d01*d01
+
+	return &Triangle{P1: p1, P2: p2, P3: p3, E1: e1, E2: e2, N: n, N1: n, N2: n, N3: n,
+		Material: material.NewDefaultMaterial(),
+		Label:    "Triangle3P",
+		//p1ToOrigin:NewVector(0,0,0),
+		//D00:d00,
+		//D01:d01,
+		//D11:d11,
+		//Denom: denom,
+	}
+}
+
 func NewTriangle(p1 geom.Tuple4, p2 geom.Tuple4, p3 geom.Tuple4, n1 geom.Tuple4, n2 geom.Tuple4, n3 geom.Tuple4) *Triangle {
 
 	e1 := geom.Sub(p2, p1)

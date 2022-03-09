@@ -38,8 +38,8 @@ type CLObject struct {
 	MinY             float64
 	MaxY             float64
 	Reflectivity     float64
-	TriangleOffset   int32       // offset into triangles slice
-	TriangleCount    int32       // number of triangles
+	TriangleOffset   int32 // offset into triangles slice
+	TriangleCount    int32 // number of triangles
 	Padding3         int64
 	Padding4         int64
 	BBMin            [4]float64
@@ -84,6 +84,21 @@ type CLCamera struct {
 func Trace(objects []CLObject, triangles []CLTriangle, deviceIndex, height, samples int, camera CLCamera) []float64 {
 	numPixels := int(camera.Width * camera.Height)
 	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
+
+	if len(triangles) == 0 {
+		triangles = append(triangles, CLTriangle{
+			P1:      [4]float64{},
+			P2:      [4]float64{},
+			P3:      [4]float64{},
+			E1:      [4]float64{},
+			E2:      [4]float64{},
+			N:       [4]float64{},
+			N1:      [4]float64{},
+			N2:      [4]float64{},
+			N3:      [4]float64{},
+			Padding: [224]byte{},
+		})
+	}
 
 	platforms, err := cl.GetPlatforms()
 	if err != nil {

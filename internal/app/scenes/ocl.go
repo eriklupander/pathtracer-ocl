@@ -100,7 +100,7 @@ func OCLScene() func() *Scene {
 		// add two triangles to a group
 		tri1 := shapes.NewTriangleN(geom.NewPoint(-0.2, -.4, 0), geom.NewPoint(0.0, -.4, 0), geom.NewPoint(0, -0.1, 0))
 		tri2 := shapes.NewTriangleN(geom.NewPoint(0, -.4, 0), geom.NewPoint(0.2, -.4, 0), geom.NewPoint(0, -0.1, 0))
-		tri3 := shapes.NewTriangleN(geom.NewPoint(0.1, -.4, -0.4), geom.NewPoint(0,-0.1,0), geom.NewPoint(0, -.4, 0))
+		tri3 := shapes.NewTriangleN(geom.NewPoint(0.1, -.4, -0.4), geom.NewPoint(0, -0.1, 0), geom.NewPoint(0, -.4, 0))
 
 		group := shapes.NewGroup()
 		group.SetMaterial(material.NewDiffuse(0.7, 0.4, 0.9))
