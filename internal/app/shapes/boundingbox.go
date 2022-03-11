@@ -60,8 +60,8 @@ func (b *BoundingBox) Add(p geom.Tuple4) {
 }
 
 func ParentSpaceBounds(shape Shape) *BoundingBox {
-	BoundingBox := BoundsOf(shape)
-	return TransformBoundingBox(BoundingBox, shape.GetTransform())
+	boundingBox := BoundsOf(shape)
+	return TransformBoundingBox(boundingBox, shape.GetTransform())
 }
 
 func TransformBoundingBox(bbox *BoundingBox, m1 geom.Mat4x4) *BoundingBox {
