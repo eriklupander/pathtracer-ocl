@@ -94,8 +94,9 @@ The current DoF has some issues producing slight artifacts, probably due to how 
 
 ## Gallery
 ### Teapot
-The classic. Here a low-res (640x480) low sample (256) render:
-![Teapot](images/teapot2.png)
+The classic. Here a 1280x960 render using 2048 samples:
+![Teapot](images/teapot-hires.png)
+_(Due to a single naive bounding box around all ~6500 triangles, rendering this image was extremely slow, about 7.5 hours on a MacBook Pro 2014)_
 
 ### Depth of Field
 Depth-of-field effect is accomplished through casting a standard camera->pixel ray into the scene, and then creating a new "focal point" by using focal distance (distance to a point along camera ray). A new random origin point is then randomly picked around the camera origin with r==aperture and a _new_ ray is cast from the new camera through the focal point, resulting in objects not near the focal point to appear increasingly out-of focus.
