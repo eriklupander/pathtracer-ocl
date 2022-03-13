@@ -14,7 +14,7 @@ import (
 func ModelScene() func() *Scene {
 	return func() *Scene {
 
-		cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -1), geom.NewPoint(0, 0.02, 0))
+		cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
 		cam.FocalLength = cmd.Cfg.FocalLength
 		cam.Aperture = cmd.Cfg.Aperture
 		// left wall
@@ -66,7 +66,7 @@ func ModelScene() func() *Scene {
 		group.SetTransform(geom.Translate(0, -0.4, 0.1))
 		group.SetTransform(geom.Scale(0.07, 0.07, 0.07))
 		silver := material.NewDiffuse(0.75, 0.75, 0.75)
-		//silver.Reflectivity = 0.2
+		silver.Reflectivity = 0.2
 		group.SetMaterial(silver)
 		shapes.Divide(group, 500)
 		group.Bounds()
@@ -82,6 +82,7 @@ func ModelScene() func() *Scene {
 
 		shapes := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, lightsource}
 		for i := range groups {
+			// Ugly hack - apply the transform and material from the "root" parent to all flattened groups
 			groups[i].Transform = group.Transform
 			groups[i].Inverse = group.Inverse
 			groups[i].InverseTranspose = group.InverseTranspose
