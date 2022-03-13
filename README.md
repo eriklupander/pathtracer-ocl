@@ -66,7 +66,7 @@ Index: 2 Type: GPU Name: GeForce GT 750M
 ```
 However, the Iris Pro iGPU does not support double-precision floating point numbers. Also, there are subtle differences between CPU and GPU device, which in certain situations may result in panics or segmentation faults. In other words: Your milage may vary. CPU-based devices seems to be the most stable and on MacBooks, CPU has significantly better performance than the discrete GPUs.
 
-**Note: At some point, the path tracer stopped working on the GeForce GT 750M. Works fine on more modern GPUs...**
+_Note: At some point, the path tracer stopped working on the **GeForce GT 750M**. Works fine on more modern GPUs..._
 
 ## Performance
 For this _reference image_ at 1280x960:
