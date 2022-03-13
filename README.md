@@ -7,12 +7,13 @@ _(2048 samples)_
 Simple unidirectional pathtracer written just for fun using Go as frontend and OpenCL as computation backend.
 
 Supports:
-* Spheres, Planes, Boxes, Cylinders
+* Spheres, Planes, Boxes, Cylinders, Plain triangles
 * Diffuse and reflective materials
 * Movable camera
 * Anti-aliasing
 * Depth of Field with simple focal length and camera aperture.
-* .OBJ model loading and rendering, incl computing vertex normals. Each model goes into one bounding box, so not efficient.
+* .OBJ model loading and rendering, incl computing vertex normals and bounding boxes. Each model goes into one bounding box, so not efficient.
+* Can generate BVH trees Go-side, but not yet render those OpenCL-side. (high on the todo list)
 
 Based on or inspired by:
 
@@ -22,12 +23,7 @@ Based on or inspired by:
 * And my own mashup of the three above, a simple and Go-native path-tracer https://github.com/eriklupander/pathtracer
 
 Next steps:
-* Groups of primitives, with bounding boxes
-* Triangle primitives
-* .obj model loading into bounding volume hierarchies 
-* Rendering models
-
-All of the above is present in my Go-only ray-tracer, but given that recursion is forbidden in OpenCL, as well as variable-length arrays cannot be passed to OpenCL without careful management of struct sizes, "numberOfNN" fields etc, incorporating 3D model rendering with acceptable performance is non-trivial.
+* Render triangle groups structured into BVH trees. Given that recursion is forbidden in OpenCL, as well as variable-length arrays cannot be passed to OpenCL without careful management of struct sizes, "numberOfNN" fields etc, incorporating 3D model rendering with acceptable performance is non-trivial.
 
 The overall solution is _probably_ to:
 * Pass ALL triangles (for all models) in a long continous array, each triangle will have pre-computed vertex/surface normals etc and consume 256 or 512 bytes each.
@@ -49,8 +45,8 @@ A few command-line args have been added to simplify testing things.
       --samples int          Number of samples per pixel (default 1)
       --aperture float       Aperture. If 0, no DoF will be used. Default: 0
       --focal-length float   Focal length. Default: 0
-      --device-index int     Use device with index (use --list-devices to list available devices)
-      --list-devices         List available devices
+      --device-index int     Use OpenCL device with index (use --list-devices to list available devices)
+      --list-devices         List available OpenCL devices
 ```
 Suggested values for focal length and aperture for the standard cornell box: 1.6 and 0.1
 
@@ -58,6 +54,8 @@ Example:
 ```shell
 go run cmd/pt/main.go --samples 2048 --aperture 0.15 --focal-length 1.6 --width 1280 --height 960
 ```
+
+Note! The project probably only works on AMD64 since there's some leftover PLAN9 assembly generated from C AVX2 instrinsics, which is unlikely to work well on M1 Macs with ARM CPUs.
 
 ### Listing and selecting a device
 Not all OpenCL devices are created equal. On the author's semi-ancient MacBook Pro 2014, running `go run cmd/pt/main.go --list-devices` yields:
@@ -67,6 +65,8 @@ Index: 1 Type: GPU Name: Iris Pro
 Index: 2 Type: GPU Name: GeForce GT 750M
 ```
 However, the Iris Pro iGPU does not support double-precision floating point numbers. Also, there are subtle differences between CPU and GPU device, which in certain situations may result in panics or segmentation faults. In other words: Your milage may vary. CPU-based devices seems to be the most stable and on MacBooks, CPU has significantly better performance than the discrete GPUs.
+
+**Note: At some point, the path tracer stopped working on the GeForce GT 750M. Works fine on more modern GPUs...**
 
 ## Performance
 For this _reference image_ at 1280x960:
