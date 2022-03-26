@@ -40,6 +40,7 @@ func ParseObj(data string) *Obj {
 				mats = ParseMtl(string(matData))
 			case "usemtl":
 				currentMaterial = toMaterial(mats[parts[1]])
+				out.Groups[currentGroup].SetMaterial(currentMaterial)
 				fmt.Printf("Set material '%v' on object '%v'\n", mats[parts[1]].Name, currentGroup)
 			case "v":
 

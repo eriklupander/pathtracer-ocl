@@ -70,8 +70,6 @@ func ModelScene() func() *Scene {
 		group.SetMaterial(silver)
 		shapes.Divide(group, 500)
 		group.Bounds()
-		groups := make([]*shapes.Group, 0)
-		shapes.Flatten(group, &groups)
 
 		// lightsource
 		lightsource := shapes.NewSphere()
@@ -80,15 +78,8 @@ func ModelScene() func() *Scene {
 		light.Emission = geom.NewColor(9, 8, 6)
 		lightsource.SetMaterial(light)
 
-		shapes := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, lightsource}
-		for i := range groups {
-			// Ugly hack - apply the transform and material from the "root" parent to all flattened groups
-			groups[i].Transform = group.Transform
-			groups[i].Inverse = group.Inverse
-			groups[i].InverseTranspose = group.InverseTranspose
-			groups[i].Material = group.Material
-			shapes = append(shapes, groups[i])
-		}
+		shapes := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, group, lightsource}
+
 		return &Scene{
 			Camera:  cam,
 			Objects: shapes,

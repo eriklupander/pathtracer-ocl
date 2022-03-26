@@ -28,22 +28,23 @@ type CLRay struct {
 }
 
 type CLObject struct {
-	Transform        [16]float64   // 128 bytes
-	Inverse          [16]float64   // 128 bytes
-	InverseTranspose [16]float64   // 128 bytes
-	Color            [4]float64    // 32 bytes
-	Emission         [4]float64    // 32 bytes == 448
-	RefractiveIndex  float64       // 8 bytes
-	Type             int64         // 8 bytes
-	MinY             float64       // 8 bytes
-	MaxY             float64       // 8 bytes
-	Reflectivity     float64       // 8 bytes
-	Padding3         int64         // 8 bytes
-	Padding4         int64         // 8 bytes == 448 + 56 == 504
-	BBMin            [4]float64    // 32 bytes
-	BBMax            [4]float64    // 32 bytes == 504 + 64 == 568
-	GroupOffset      int32         // 4 bytes, if > 0 means this CLObject is a Group, look at CLGroup offset. // 572
-	Padding5         [452]byte
+	Transform        [16]float64 // 128 bytes
+	Inverse          [16]float64 // 128 bytes
+	InverseTranspose [16]float64 // 128 bytes
+	Color            [4]float64  // 32 bytes
+	Emission         [4]float64  // 32 bytes == 448
+	RefractiveIndex  float64     // 8 bytes
+	Type             int64       // 8 bytes
+	MinY             float64     // 8 bytes
+	MaxY             float64     // 8 bytes
+	Reflectivity     float64     // 8 bytes
+	Padding3         int64       // 8 bytes
+	Padding4         int64       // 8 bytes == 448 + 56 == 504
+	BBMin            [4]float64  // 32 bytes
+	BBMax            [4]float64  // 32 bytes == 504 + 64 == 568
+	ChildCount       int32       // 4 bytes                 572
+	Children         [64]int32   // 64x4 == 256             828
+	Padding5         [196]byte
 }
 
 type CLGroup struct {
@@ -79,16 +80,16 @@ type CLBoundingBox struct {
 }
 
 type CLCamera struct {
-	Width       int32   // 4
-	Height      int32   // 8
-	Fov         float64 // 16
-	PixelSize   float64 // 24
-	HalfWidth   float64 // 32
-	HalfHeight  float64 // 40
-	Aperture    float64 // 48
-	FocalLength float64 // 56
-	Inverse [16]float64 // 128 + 56 == 184
-	Padding [72]byte    // 256-72 == 184
+	Width       int32       // 4
+	Height      int32       // 8
+	Fov         float64     // 16
+	PixelSize   float64     // 24
+	HalfWidth   float64     // 32
+	HalfHeight  float64     // 40
+	Aperture    float64     // 48
+	FocalLength float64     // 56
+	Inverse     [16]float64 // 128 + 56 == 184
+	Padding     [72]byte    // 256-72 == 184
 }
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate

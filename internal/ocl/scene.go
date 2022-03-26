@@ -22,6 +22,7 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		obj.Color = in[i].GetMaterial().Color
 		obj.Emission = in[i].GetMaterial().Emission
 		obj.RefractiveIndex = in[i].GetMaterial().RefractiveIndex
+		obj.Children = initToMinus1()
 
 		switch in[i].(type) {
 		case *shapes.Plane:
@@ -39,9 +40,31 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 			obj.BBMin = in[i].(*shapes.Group).BoundingBox.Min
 			obj.BBMax = in[i].(*shapes.Group).BoundingBox.Max
 
-			// when we encounter a group...
-			obj.GroupOffset = globalGroupOffset + 1
-			BuildCLGroup(in[i].(*shapes.Group))
+			// Let's try a hack. If the group's direct children contains max 2 groups, we can pass it "as is". Otherwise,
+			// we need to split it into N children on this obj
+			cnt := 0
+			for j := range in[i].(*shapes.Group).Children {
+				_, ok := in[i].(*shapes.Group).Children[j].(*shapes.Group)
+				if ok {
+					cnt++
+				}
+			}
+
+			if cnt == 1 {
+				// when we encounter a single group...
+				obj.Children[0] = BuildCLGroup(in[i].(*shapes.Group))
+				obj.ChildCount = 1
+			} else {
+				// we need to loop over the groups and add each one as a child index to this obj
+				for j := range in[i].(*shapes.Group).Children {
+					group, ok := in[i].(*shapes.Group).Children[j].(*shapes.Group)
+					if ok {
+						obj.Children[j] = BuildCLGroup(group)
+						obj.ChildCount++
+					}
+				}
+			}
+
 		default:
 			obj.Type = 999
 		}
@@ -51,11 +74,19 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		// finally, pad!
 		obj.Padding3 = 0
 		obj.Padding4 = 0
-		obj.Padding5 = [452]byte{}
+		obj.Padding5 = [196]byte{}
 
 		objs = append(objs, obj)
 	}
 	return objs, triangles, groups
+}
+
+func initToMinus1() [64]int32 {
+	out := [64]int32{}
+	for i := 0; i < 64; i++ {
+		out[i] = -1
+	}
+	return out
 }
 
 func BuildCLGroup(group *shapes.Group) int32 {

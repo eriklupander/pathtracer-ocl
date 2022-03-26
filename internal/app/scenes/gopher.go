@@ -51,20 +51,26 @@ func GopherScene() func() *Scene {
 		frontWall.SetTransform(geom.RotateX(math.Pi / 2))
 		frontWall.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
 
-		data, err := ioutil.ReadFile("assets/teapot.obj")
+		objects := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, frontWall}
+
+		data, err := ioutil.ReadFile("assets/gopher.obj")
 		if err != nil {
 			panic(err.Error())
 		}
 		model := obj.ParseObj(string(data))
-		group := model.ToGroup().Children[0].(*shapes.Group)
+		group := model.ToGroup()
 		group.Bounds()
-		group.SetTransform(geom.Translate(0, -0.4, 0.1))
-		group.SetTransform(geom.Scale(0.07, 0.07, 0.07))
+
+		group.SetTransform(geom.Translate(0, -0.2, 0.3))
+		group.SetTransform(geom.RotateZ(-math.Pi / 2))
+		group.SetTransform(geom.RotateX(-math.Pi / 2))
+		group.SetTransform(geom.Scale(0.15, 0.15, 0.15))
 		silver := material.NewDiffuse(0.75, 0.75, 0.75)
 		silver.Reflectivity = 0.2
 		group.SetMaterial(silver)
 		shapes.Divide(group, 60)
 		group.Bounds()
+		objects = append(objects, group)
 
 		// lightsource
 		lightsource := shapes.NewSphere()
@@ -72,10 +78,10 @@ func GopherScene() func() *Scene {
 		light := material.NewLightBulb()
 		light.Emission = geom.NewColor(9, 8, 6)
 		lightsource.SetMaterial(light)
-
+		objects = append(objects, lightsource)
 		return &Scene{
 			Camera:  cam,
-			Objects: []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, lightsource, group},
+			Objects: objects,
 		}
 	}
 }
