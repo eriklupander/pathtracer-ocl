@@ -43,14 +43,12 @@ typedef struct __attribute__((packed)) tag_object {
   double minY;               // 8 bytes. Used for cylinders.
   double maxY;               // 8 bytes. Used for cylinders.
   double reflectivity;       // 8 bytes
-  int triangleOffset;        // 4 bytes. Used for groups. TODO not anymore...
-  int triangleCount;         // 4 bytes. Used for groups. TODO not anymore...
   double padding3;           // 8 bytes
   double padding4;           // 8 bytes                      // 512
   double4 bbMin;             // 32 bytes
   double4 bbMax;             // 32 bytes                     // 576
   int groupOffset;           // 4 bytes. Used for groups to know which "group" that's the root group.
-  char padding5[444];        // 448 bytes                    // 1024
+  char padding5[452];        // 452 bytes                    // 1024
 } object;
 
 typedef struct tag_intersection {
@@ -221,7 +219,7 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
     // if DoF...
     if (cam.aperture != 0) {
 
-        double4 pos = origin + direction*cam.focalLength; //mat.PositionPtr(rc.firstRay, rc.camera.FocalLength, &pos)
+        double4 pos = origin + direction*cam.focalLength;
         double4 newOrigin={};
         newOrigin.x = origin.x + (-cam.aperture + rndY*cam.aperture*2);
         newOrigin.y = origin.y + (-cam.aperture + rndX*cam.aperture*2);
@@ -233,63 +231,6 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
     ray r = {origin, direction};
     return r;
 }
-
-
-// WORKS! Should be portable to OpenCL given fixed size stack.
-//inline void traverseIndex(group *tree) {
-//	// 1) Create an empty stack.
-//	unsigned int stack[200]; // = make([]int, MAX_RECURSION_DEPTH)
-//
-//	// Stack index, i.e. current "depth" of stack
-//	unsigned int currentSIndex = 0;
-//
-//	// Tree index, i.e. which "node index" we're currently processing
-//	unsigned int currentNodeIndex = 0;
-//
-//	// Initialize current node as root
-//	group *current = &tree[currentNodeIndex];
-//
-//	for (;current != 0 || currentSIndex > -1;) {
-//
-//		for (;current != 0;) { // HERE ADD BB CHECK //&& current.Inside) {
-//			// Push the current node index to the Stack, i.e. add at current index and then increment the stack depth.
-//			stack[currentSIndex] = currentNodeIndex;
-//			currentSIndex++;
-//
-//			// if the left child is populated (i.e. > -1), update currentNodeIndex with left child and
-//			// update the pointer to the current node
-//			if (current->children[0] > -1) {
-//				currentNodeIndex = current->children[0];
-//				current = &tree[current->children[0]];
-//			} else {
-//				// If no left child, mark current as nil, so we can exit the inner for.
-//				current = 0;
-//			}
-//		}
-//
-//		// We pop our stack by decrementing (remember, the last iteration above resulting an increment, but no push. (Fix?)
-//		currentSIndex--;
-//		if (currentSIndex == -1) {
-//			return;
-//		}
-//
-//		// get the popped item by fetching the node index from the current stack index.
-//		current = &tree[stack[currentSIndex]];
-//
-//		// print contents. In our tracer, we'll iterate over all triangles and record triangle/ray intersections...
-//		printf("Check %d triangles from node\n", current->triCount);
-//
-//		// we're done with the left subtree, check if there's a right-hand node.
-//		if (current->children[1] != -1) {
-//			// if there's a right-hand node, update the node index and the current node.
-//			currentNodeIndex = current->children[1];
-//			current = &tree[current->children[1]];
-//		} else {
-//			// if no right-hand side, set current to nil.
-//			current = 0;
-//		}
-//	}
-//}
 
 __kernel void trace(__global object *objects,
                     const unsigned int numObjects,
@@ -308,24 +249,6 @@ __kernel void trace(__global object *objects,
   float fgi = seedX[i] / numObjects;
   float fgi2 = seedX[i] / samples;
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
-
-    // check groups
-//    for (int a = 0; a < 10;a++) {
-//        group g = groups[a];
-//        printf("ID: %d ====> Group: %d ===  %d %d %d ", i, a, g.childGroupCount, g.triOffset, g.triCount);
-//        printf("WITH BB: min: %f %f %f", g.bbMin.x, g.bbMin.y, g.bbMin.z);
-//        printf(" WITH BB: max: %f %f %f\n", g.bbMax.x, g.bbMax.y, g.bbMax.z);
-//        for (int b = 0; b < g.childGroupCount;b++) {
-//            printf("   %d\n", g.children[b]);
-//        }
-//    }
-//  for (int a=0;a<3;a++) {
-//    triangle tri = triangles[a];
-//    printf("%d: P1: %f %f %f\n", a, tri.p1.x, tri.p1.y, tri.p1.z);
-//    printf("%d: P2: %f %f %f\n", a, tri.p2.x, tri.p2.y, tri.p2.z);
-//    printf("%d: P3: %f %f %f\n", a, tri.p3.x, tri.p3.y, tri.p3.z);
-//  }
-
   double4 colors = (double4)(0, 0, 0, 0);
 
   // get current x,y coordinate from i given image width
@@ -424,9 +347,7 @@ __kernel void trace(__global object *objects,
 
              double y0 = tRayOrigin.y + t0*tRayDirection.y;
 
-             // BROKEN BELOW!!!
              if (y0 > objects[j].minY && y0 < objects[j].maxY) {
-                 //*xs = append(*xs, NewIntersection(t0, c))
                  // add intersection
                  intersections[numIntersections] = t0;
                  xsObjects[numIntersections] = j;
@@ -435,7 +356,6 @@ __kernel void trace(__global object *objects,
 
              double y1 = tRayOrigin.y + t1*tRayDirection.y;
              if (y1 > objects[j].minY && y1 < objects[j].maxY) {
-                 //*xs = append(*xs, NewIntersection(t1, c))
                  // add intersection
                  intersections[numIntersections] = t1;
                  xsObjects[numIntersections] = j;
@@ -488,7 +408,6 @@ __kernel void trace(__global object *objects,
             // Using this BB only reduces teapot with 8 samples from 3m29.753546781s to 31.606680099s.
             // Further, adding the BB check for each node in the tree further reduces the time taken to 4.037422895s
             if (!intersectRayWithBox(tRayOrigin, tRayDirection, objects[j].bbMin, objects[j].bbMax)) {
-                // printf("skipped group due to not intersecting BB\n");
                 //skipped++;
                 continue;
             }
@@ -497,8 +416,6 @@ __kernel void trace(__global object *objects,
             // If the "object" BB was intersected, we take a look at the "object's" groupOffset. If > -1, we
             // need to set up a local stack to traverse the group hierarchy
             if (objects[j].groupOffset > -1) {
-                // get the root. The root group shouldn't contain any triangles...
-               // group currentGroup = groups[objects[j].groupOffset];
 
                 // START PSUEDO-RECURSIVE CODE
                 // 1) Create an empty stack. (move to top later)
@@ -512,16 +429,12 @@ __kernel void trace(__global object *objects,
 
                 // Initialize current node as root
                 group root = groups[currentNodeIndex];
-                group *current = &root; //groups[currentNodeIndex];
+                group *current = &root;
 
                 for (;current != 0 || currentSIndex > -1;) {
-                   // printf("step into recursion at stack index %d with node index %d\n", currentSIndex, currentNodeIndex);
                     for (;current != 0 && intersectRayWithBox(tRayOrigin, tRayDirection, current->bbMin, current->bbMax);) { // HERE ADD BB CHECK //&& current.Inside) { && intersectRayWithBox(tRayOrigin, tRayDirection, current->bbMin, current->bbMax)
-                       // printf("step into inner with %d %d!\n",  currentSIndex, currentNodeIndex);
 
-
-                    // print contents. In our tracer, we'll iterate over all triangles and record triangle/ray intersections...
-                   // printf("Check %d triangles from node\n", current->triCount);
+                    // Iterate over all triangles and record triangle/ray intersections...
                     for (int n = current->triOffset;n < current->triOffset+current->triCount;n++) {
 
                         double4 dirCrossE2 = cross(tRayDirection, triangles[n].e2);
@@ -556,10 +469,7 @@ __kernel void trace(__global object *objects,
                                         triangles[n].n1  * (1.0-u-v);
 
                         numIntersections++;
-                       //  printf("intersected a triangle!\n");
                     }
-
-
 
                         // Push the current node index to the Stack, i.e. add at current index and then increment the stack depth.
                         stack[currentSIndex] = currentNodeIndex;
@@ -568,10 +478,9 @@ __kernel void trace(__global object *objects,
                         // if the left child is populated (i.e. > -1), update currentNodeIndex with left child and
                         // update the pointer to the current node
                         if (current->children[0] > 0) {
-                       // printf("step into LEFT child\n");
                             currentNodeIndex = current->children[0];
                             root = groups[current->children[0]];
-                            current = &root; //groups[current->children[0]];
+                            current = &root;
                         } else {
                             // If no left child, mark current as nil, so we can exit the inner for.
                             current = 0;
@@ -586,12 +495,11 @@ __kernel void trace(__global object *objects,
 
                     // get the popped item by fetching the node index from the current stack index.
                     root = groups[stack[currentSIndex]];
-                    current = &root; //groups[stack[currentSIndex]];
+                    current = &root;
 
 
                     // we're done with the left subtree, check if there's a right-hand node.
                     if (current->children[1] > 0) {
-                       // printf("enter right-hand side!!\n");
                         // if there's a right-hand node, update the node index and the current node.
                         currentNodeIndex = current->children[1];
                         root = groups[current->children[1]];

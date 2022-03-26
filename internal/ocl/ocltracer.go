@@ -28,25 +28,22 @@ type CLRay struct {
 }
 
 type CLObject struct {
-	Transform        [16]float64
-	Inverse          [16]float64
-	InverseTranspose [16]float64
-	Color            [4]float64
-	Emission         [4]float64
-	RefractiveIndex  float64
-	Type             int64
-	MinY             float64
-	MaxY             float64
-	Reflectivity     float64
-	TriangleOffset   int32 // offset into triangles slice
-	TriangleCount    int32 // number of triangles
-	Padding3         int64
-	Padding4         int64
-	BBMin            [4]float64
-	BBMax            [4]float64
-	GroupOffset      int32 // 4 bytes, if > 0 means this CLObject is a Group, look at CLGroup offset.
-	GroupCount       int32 // 4 bytes, number of groups from offset.
-	Padding5         [440]byte
+	Transform        [16]float64   // 128 bytes
+	Inverse          [16]float64   // 128 bytes
+	InverseTranspose [16]float64   // 128 bytes
+	Color            [4]float64    // 32 bytes
+	Emission         [4]float64    // 32 bytes == 448
+	RefractiveIndex  float64       // 8 bytes
+	Type             int64         // 8 bytes
+	MinY             float64       // 8 bytes
+	MaxY             float64       // 8 bytes
+	Reflectivity     float64       // 8 bytes
+	Padding3         int64         // 8 bytes
+	Padding4         int64         // 8 bytes == 448 + 56 == 504
+	BBMin            [4]float64    // 32 bytes
+	BBMax            [4]float64    // 32 bytes == 504 + 64 == 568
+	GroupOffset      int32         // 4 bytes, if > 0 means this CLObject is a Group, look at CLGroup offset. // 572
+	Padding5         [452]byte
 }
 
 type CLGroup struct {
@@ -90,7 +87,6 @@ type CLCamera struct {
 	HalfHeight  float64 // 40
 	Aperture    float64 // 48
 	FocalLength float64 // 56
-	//Transform   [16]float64
 	Inverse [16]float64 // 128 + 56 == 184
 	Padding [72]byte    // 256-72 == 184
 }

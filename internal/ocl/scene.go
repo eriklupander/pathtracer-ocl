@@ -42,7 +42,6 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 			// when we encounter a group...
 			obj.GroupOffset = globalGroupOffset + 1
 			BuildCLGroup(in[i].(*shapes.Group))
-			obj.GroupCount = int32(len(in[i].(*shapes.Group).Children))
 		default:
 			obj.Type = 999
 		}
@@ -52,7 +51,7 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		// finally, pad!
 		obj.Padding3 = 0
 		obj.Padding4 = 0
-		obj.Padding5 = [440]byte{}
+		obj.Padding5 = [452]byte{}
 
 		objs = append(objs, obj)
 	}
