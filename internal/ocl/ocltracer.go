@@ -44,7 +44,22 @@ type CLObject struct {
 	Padding4         int64
 	BBMin            [4]float64
 	BBMax            [4]float64
-	Padding5         [448]byte
+	GroupOffset      int32 // 4 bytes, if > 0 means this CLObject is a Group, look at CLGroup offset.
+	GroupCount       int32 // 4 bytes, number of groups from offset.
+	Padding5         [440]byte
+}
+
+type CLGroup struct {
+	BBMin           [4]float64 // 32 bytes
+	BBMax           [4]float64 // 32 bytes
+	Color           [4]float64 // 32 bytes
+	Emission        [4]float64 // 32 bytes
+	TriOffset       int32      // 4 bytes
+	TriCount        int32      // 4 bytes
+	ChildGroupCount int32      // 4 bytes, should always be 2 or 0
+	Children        [16]int32  // 64 bytes, allow up to 16 subgroups.
+	Padding         [52]byte   // padding, 52 bytes (can be used as a label)
+	// Total 256 bytes
 }
 
 type CLTriangle struct {
@@ -58,6 +73,7 @@ type CLTriangle struct {
 	N2      [4]float64 // 32 bytes (256 here)
 	N3      [4]float64 // 32 bytes (288 here)
 	Padding [224]byte
+	// Total 512 bytes
 }
 
 type CLBoundingBox struct {
@@ -81,7 +97,7 @@ type CLCamera struct {
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(objects []CLObject, triangles []CLTriangle, deviceIndex, height, samples int, camera CLCamera) []float64 {
+func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceIndex, height, samples int, camera CLCamera) []float64 {
 	numPixels := int(camera.Width * camera.Height)
 	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
 
@@ -98,6 +114,9 @@ func Trace(objects []CLObject, triangles []CLTriangle, deviceIndex, height, samp
 			N3:      [4]float64{},
 			Padding: [224]byte{},
 		})
+	}
+	if len(groups) == 0 {
+		groups = append(groups, CLGroup{Children: [16]int32{}, Padding: [52]byte{}})
 	}
 
 	platforms, err := cl.GetPlatforms()
@@ -191,14 +210,14 @@ func Trace(objects []CLObject, triangles []CLTriangle, deviceIndex, height, samp
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(objects, triangles, camera, context, kernel, queue, samples, workGroupSize, y, batchSize)...)
+		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results
 }
 
-func computeBatch(objects []CLObject, triangles []CLTriangle, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int) []float64 {
+func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int) []float64 {
 	pixelsInBatch := rowsPerBatch * int(camera.Width)
 
 	// populate seed of random numbers, OpenCL can't do random by itself AFAIK
@@ -224,6 +243,12 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, camera CLCamera, c
 		logrus.Fatalf("CreateBuffer failed for triangles input: %+v", err)
 	}
 	defer trianglesBuffer.Release()
+
+	groupsBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 256*len(groups))
+	if err != nil {
+		logrus.Fatalf("CreateBuffer failed for groups input: %+v", err)
+	}
+	defer groupsBuffer.Release()
 
 	seedBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 8*len(seed))
 	if err != nil {
@@ -251,29 +276,35 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, camera CLCamera, c
 	objectsDataPtr := unsafe.Pointer(&objects[0])
 	objectsDataSize := int(unsafe.Sizeof(objects[0])) * len(objects)
 	if _, err := queue.EnqueueWriteBuffer(objectsBuffer, true, 0, objectsDataSize, objectsDataPtr, nil); err != nil {
-		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+		logrus.Fatalf("EnqueueWriteBuffer for objects failed: %+v", err)
 	}
 
 	trianglesDataPtr := unsafe.Pointer(&triangles[0])
 	trianglesDataSize := int(unsafe.Sizeof(triangles[0])) * len(triangles)
 	if _, err := queue.EnqueueWriteBuffer(trianglesBuffer, true, 0, trianglesDataSize, trianglesDataPtr, nil); err != nil {
-		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+		logrus.Fatalf("EnqueueWriteBuffer for triangles failed: %+v", err)
+	}
+
+	groupsDataPtr := unsafe.Pointer(&groups[0])
+	groupsDataSize := int(unsafe.Sizeof(groups[0])) * len(groups)
+	if _, err := queue.EnqueueWriteBuffer(groupsBuffer, true, 0, groupsDataSize, groupsDataPtr, nil); err != nil {
+		logrus.Fatalf("EnqueueWriteBuffer for groups failed: %+v", err)
 	}
 
 	seedDataPtr := unsafe.Pointer(&seed[0])
 	seedDataSize := int(unsafe.Sizeof(seed[0])) * len(seed)
 	if _, err := queue.EnqueueWriteBuffer(seedBuffer, true, 0, seedDataSize, seedDataPtr, nil); err != nil {
-		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+		logrus.Fatalf("EnqueueWriteBuffer for seed failed: %+v", err)
 	}
 
 	cameraDataPtr := unsafe.Pointer(&camera)
 	cameraDataSize := int(unsafe.Sizeof(camera))
 	if _, err := queue.EnqueueWriteBuffer(cameraBuffer, true, 0, cameraDataSize, cameraDataPtr, nil); err != nil {
-		logrus.Fatalf("EnqueueWriteBuffer failed: %+v", err)
+		logrus.Fatalf("EnqueueWriteBuffer for camera failed: %+v", err)
 	}
 
 	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
-	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset)); err != nil {
+	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, groupsBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset)); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 

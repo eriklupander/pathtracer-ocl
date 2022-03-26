@@ -27,7 +27,7 @@ func main() {
 	configFlags.Int("samples", 1, "Number of samples per pixel")
 	configFlags.Float64("aperture", 0.0, "Aperture. If 0, no DoF will be used")
 	configFlags.Float64("focal-length", 0.0, "Focal length.")
-	configFlags.String("scene", "reference", "scene from /scenes")
+	configFlags.String("scene", "gopher", "scene from /scenes")
 	configFlags.Int("device-index", 0, "Use device with index (use --list-devices to list available devices)")
 	configFlags.Bool("list-devices", false, "List available devices")
 
@@ -50,6 +50,8 @@ func main() {
 	switch cmd.Cfg.Scene {
 	case "teapot":
 		scene = scenes.ModelScene()
+	case "gopher":
+		scene = scenes.GopherScene()
 	default:
 		scene = scenes.OCLScene()
 	}

@@ -19,6 +19,19 @@ typedef struct tag_ray {
   double4 direction;
 } ray;
 
+typedef struct __attribute__((packed)) tag_group {
+	double4 bbMin;      // 32 bytes
+	double4 bbMax;      // 32 bytes
+	double4 color;      // 32 bytes
+	double4 emission;   // 32 bytes
+	int triOffset;      // 4 bytes
+	int triCount;       // 4 bytes
+	int childGroupCount;// 4 bytes, should always be 2 or 0
+	int children[16];   // 64 bytes, allow up to 16 subgroups.
+	char padding[52];   // padding, 52 bytes (can be used as a label)
+	// Total 256 bytes
+} group;
+
 typedef struct __attribute__((packed)) tag_object {
   double16 transform;        // 128 bytes 16x4
   double16 inverse;          // 128 bytes
@@ -30,13 +43,14 @@ typedef struct __attribute__((packed)) tag_object {
   double minY;               // 8 bytes. Used for cylinders.
   double maxY;               // 8 bytes. Used for cylinders.
   double reflectivity;       // 8 bytes
-  int triangleOffset;        // 4 bytes. Used for groups.
-  int triangleCount;         // 4 bytes. Used for groups.
+  int triangleOffset;        // 4 bytes. Used for groups. TODO not anymore...
+  int triangleCount;         // 4 bytes. Used for groups. TODO not anymore...
   double padding3;           // 8 bytes
   double padding4;           // 8 bytes                      // 512
   double4 bbMin;             // 32 bytes
   double4 bbMax;             // 32 bytes                     // 576
-  char padding5[448];        // 448 bytes                    // 1024
+  int groupOffset;           // 4 bytes. Used for groups to know which "group" that's the root group.
+  char padding5[444];        // 448 bytes                    // 1024
 } object;
 
 typedef struct tag_intersection {
@@ -221,9 +235,66 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
 }
 
 
+// WORKS! Should be portable to OpenCL given fixed size stack.
+//inline void traverseIndex(group *tree) {
+//	// 1) Create an empty stack.
+//	unsigned int stack[200]; // = make([]int, MAX_RECURSION_DEPTH)
+//
+//	// Stack index, i.e. current "depth" of stack
+//	unsigned int currentSIndex = 0;
+//
+//	// Tree index, i.e. which "node index" we're currently processing
+//	unsigned int currentNodeIndex = 0;
+//
+//	// Initialize current node as root
+//	group *current = &tree[currentNodeIndex];
+//
+//	for (;current != 0 || currentSIndex > -1;) {
+//
+//		for (;current != 0;) { // HERE ADD BB CHECK //&& current.Inside) {
+//			// Push the current node index to the Stack, i.e. add at current index and then increment the stack depth.
+//			stack[currentSIndex] = currentNodeIndex;
+//			currentSIndex++;
+//
+//			// if the left child is populated (i.e. > -1), update currentNodeIndex with left child and
+//			// update the pointer to the current node
+//			if (current->children[0] > -1) {
+//				currentNodeIndex = current->children[0];
+//				current = &tree[current->children[0]];
+//			} else {
+//				// If no left child, mark current as nil, so we can exit the inner for.
+//				current = 0;
+//			}
+//		}
+//
+//		// We pop our stack by decrementing (remember, the last iteration above resulting an increment, but no push. (Fix?)
+//		currentSIndex--;
+//		if (currentSIndex == -1) {
+//			return;
+//		}
+//
+//		// get the popped item by fetching the node index from the current stack index.
+//		current = &tree[stack[currentSIndex]];
+//
+//		// print contents. In our tracer, we'll iterate over all triangles and record triangle/ray intersections...
+//		printf("Check %d triangles from node\n", current->triCount);
+//
+//		// we're done with the left subtree, check if there's a right-hand node.
+//		if (current->children[1] != -1) {
+//			// if there's a right-hand node, update the node index and the current node.
+//			currentNodeIndex = current->children[1];
+//			current = &tree[current->children[1]];
+//		} else {
+//			// if no right-hand side, set current to nil.
+//			current = 0;
+//		}
+//	}
+//}
+
 __kernel void trace(__global object *objects,
                     const unsigned int numObjects,
                     __global triangle *triangles,
+                    __global group *groups,
                     __global double *output,
                     __global double *seedX,
                     const unsigned int samples,
@@ -238,6 +309,16 @@ __kernel void trace(__global object *objects,
   float fgi2 = seedX[i] / samples;
   double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
 
+    // check groups
+//    for (int a = 0; a < 10;a++) {
+//        group g = groups[a];
+//        printf("ID: %d ====> Group: %d ===  %d %d %d ", i, a, g.childGroupCount, g.triOffset, g.triCount);
+//        printf("WITH BB: min: %f %f %f", g.bbMin.x, g.bbMin.y, g.bbMin.z);
+//        printf(" WITH BB: max: %f %f %f\n", g.bbMax.x, g.bbMax.y, g.bbMax.z);
+//        for (int b = 0; b < g.childGroupCount;b++) {
+//            printf("   %d\n", g.children[b]);
+//        }
+//    }
 //  for (int a=0;a<3;a++) {
 //    triangle tri = triangles[a];
 //    printf("%d: P1: %f %f %f\n", a, tri.p1.x, tri.p1.y, tri.p1.z);
@@ -279,7 +360,7 @@ __kernel void trace(__global object *objects,
         double4 tRayDirection = mul(objects[j].inverse, rayDirection);
 
         // Intersection code
-        if (objType == 0) { // intersect transformed ray with plane
+        if (objType == 0) { // PLANE - intersect transformed ray with plane
           if (fabs(tRayDirection.y) > 0.0001) {
             double t = -tRayOrigin.y / tRayDirection.y;
             intersections[numIntersections] = t;
@@ -313,7 +394,7 @@ __kernel void trace(__global object *objects,
             xsObjects[numIntersections] = j;
             numIntersections++;
           }
-        } else if (objType == 2) {
+        } else if (objType == 2) { // CYLINDER
             // Cylinder intersection
              double rdx2 = tRayDirection.x * tRayDirection.x;
              double rdz2 = tRayDirection.z * tRayDirection.z;
@@ -373,7 +454,7 @@ __kernel void trace(__global object *objects,
                   xsObjects[numIntersections] = j;
                   numIntersections++;
              }
-        } else if (objType == 3) {
+        } else if (objType == 3) { // BOX
             // There is supposed to be a way to optimize this for fewer checks by looking at early values.
             double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x, -1.0, 1.0);
             double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y, -1.0, 1.0);
@@ -395,7 +476,8 @@ __kernel void trace(__global object *objects,
             intersections[numIntersections] = tmax;
             xsObjects[numIntersections] = j;
             numIntersections++;
-        } else if (objType == 4) {
+        } else if (objType == 4) { // GROUPS
+
             // Group with triangles experiment
             // Groups MUST have their bounds computed. Start by checking if ray intersects bounds.
             // Remember: At this point in the code, the group's transform has already modified the ray.
@@ -403,46 +485,126 @@ __kernel void trace(__global object *objects,
             // really work that way...
             // Note!! BB must have extent in all 3-axises. I.e two triangles forming a wall facing the Z axis will have 0
             // depth which breaks the intersect code. (typically, use this for models that's rarely flat, or fake something if 0.)
+            // Using this BB only reduces teapot with 8 samples from 3m29.753546781s to 31.606680099s.
+            // Further, adding the BB check for each node in the tree further reduces the time taken to 4.037422895s
             if (!intersectRayWithBox(tRayOrigin, tRayDirection, objects[j].bbMin, objects[j].bbMax)) {
                 // printf("skipped group due to not intersecting BB\n");
                 //skipped++;
                 continue;
             }
             //hit++;
-            for (int n = objects[j].triangleOffset;n < objects[j].triangleOffset+objects[j].triangleCount;n++) {
 
-                double4 dirCrossE2 = cross(tRayDirection, triangles[n].e2);
-                double determinant = dot(triangles[n].e1, dirCrossE2);
-                if (fabs(determinant) < 0.0001) {
-                    continue;
+            // If the "object" BB was intersected, we take a look at the "object's" groupOffset. If > -1, we
+            // need to set up a local stack to traverse the group hierarchy
+            if (objects[j].groupOffset > -1) {
+                // get the root. The root group shouldn't contain any triangles...
+               // group currentGroup = groups[objects[j].groupOffset];
+
+                // START PSUEDO-RECURSIVE CODE
+                // 1) Create an empty stack. (move to top later)
+                int stack[200] = {0}; // = make([]int, MAX_RECURSION_DEPTH)
+
+                // Stack index, i.e. current "depth" of stack
+                int currentSIndex = 0;
+
+                // Tree index, i.e. which "node index" we're currently processing
+                int currentNodeIndex = objects[j].groupOffset;
+
+                // Initialize current node as root
+                group root = groups[currentNodeIndex];
+                group *current = &root; //groups[currentNodeIndex];
+
+                for (;current != 0 || currentSIndex > -1;) {
+                   // printf("step into recursion at stack index %d with node index %d\n", currentSIndex, currentNodeIndex);
+                    for (;current != 0 && intersectRayWithBox(tRayOrigin, tRayDirection, current->bbMin, current->bbMax);) { // HERE ADD BB CHECK //&& current.Inside) { && intersectRayWithBox(tRayOrigin, tRayDirection, current->bbMin, current->bbMax)
+                       // printf("step into inner with %d %d!\n",  currentSIndex, currentNodeIndex);
+
+
+                    // print contents. In our tracer, we'll iterate over all triangles and record triangle/ray intersections...
+                   // printf("Check %d triangles from node\n", current->triCount);
+                    for (int n = current->triOffset;n < current->triOffset+current->triCount;n++) {
+
+                        double4 dirCrossE2 = cross(tRayDirection, triangles[n].e2);
+                        double determinant = dot(triangles[n].e1, dirCrossE2);
+                        if (fabs(determinant) < 0.0001) {
+                            continue;
+                        }
+
+                        // Triangle misses over P1-P3 edge
+                        double f = 1.0 / determinant;
+                        double4 p1ToOrigin = tRayOrigin - triangles[n].p1;
+                        double u = f * dot(p1ToOrigin, dirCrossE2);
+                        if (u < 0 || u > 1) {
+                            continue;
+                        }
+
+                        double4 originCrossE1 = cross(p1ToOrigin, triangles[n].e1);
+                        double v = f * dot(tRayDirection, originCrossE1);
+                        if (v < 0 || (u+v) > 1) {
+                            continue;
+                        }
+                        double t = f * dot(triangles[n].e2, originCrossE1);
+                        intersections[numIntersections] = t;
+                        xsObjects[numIntersections] = j;
+
+                        // assume we have vertex normals. If not, assume N in n1,n2,n3
+                        // stored the computed normal in a list using the same indexing as xsObjects so
+                        // if a ray intersects several triangles in the group, we'll get an intersection per triangle
+                        // but can separate their normals and then only use the one for the nearest intersection
+                        xsTriangle[numIntersections] = triangles[n].n2 * u +
+                                        triangles[n].n3 * v +
+                                        triangles[n].n1  * (1.0-u-v);
+
+                        numIntersections++;
+                       //  printf("intersected a triangle!\n");
+                    }
+
+
+
+                        // Push the current node index to the Stack, i.e. add at current index and then increment the stack depth.
+                        stack[currentSIndex] = currentNodeIndex;
+                        currentSIndex++;
+
+                        // if the left child is populated (i.e. > -1), update currentNodeIndex with left child and
+                        // update the pointer to the current node
+                        if (current->children[0] > 0) {
+                       // printf("step into LEFT child\n");
+                            currentNodeIndex = current->children[0];
+                            root = groups[current->children[0]];
+                            current = &root; //groups[current->children[0]];
+                        } else {
+                            // If no left child, mark current as nil, so we can exit the inner for.
+                            current = 0;
+                        }
+                    }
+
+                    // We pop our stack by decrementing (remember, the last iteration above resulting an increment, but no push. (Fix?)
+                    currentSIndex--;
+                    if (currentSIndex == -1) {
+                        goto done;
+                    }
+
+                    // get the popped item by fetching the node index from the current stack index.
+                    root = groups[stack[currentSIndex]];
+                    current = &root; //groups[stack[currentSIndex]];
+
+
+                    // we're done with the left subtree, check if there's a right-hand node.
+                    if (current->children[1] > 0) {
+                       // printf("enter right-hand side!!\n");
+                        // if there's a right-hand node, update the node index and the current node.
+                        currentNodeIndex = current->children[1];
+                        root = groups[current->children[1]];
+                        current = &root; //groups[current->children[1]];
+                    } else {
+                        // if no right-hand side, set current to nil. In a binary tree, we should
+                        // always get a right side if we got a left side...
+                        current = 0;
+                    }
                 }
-
-                // Triangle misses over P1-P3 edge
-                double f = 1.0 / determinant;
-                double4 p1ToOrigin = tRayOrigin - triangles[n].p1;
-                double u = f * dot(p1ToOrigin, dirCrossE2);
-                if (u < 0 || u > 1) {
-                    continue;
-                }
-
-                double4 originCrossE1 = cross(p1ToOrigin, triangles[n].e1);
-                double v = f * dot(tRayDirection, originCrossE1);
-                if (v < 0 || (u+v) > 1) {
-                    continue;
-                }
-                double t = f * dot(triangles[n].e2, originCrossE1);
-                intersections[numIntersections] = t;
-                xsObjects[numIntersections] = j;
-
-                // assume we have vertex normals. If not, assume N in n1,n2,n3
-                // stored the computed normal in a list using the same indexing as xsObjects so
-                // if a ray intersects several triangles in the group, we'll get an intersection per triangle
-                // but can separate their normals and then only use the one for the nearest intersection
-                xsTriangle[numIntersections] = triangles[n].n2 * u +
-                                triangles[n].n3 * v +
-                                triangles[n].n1  * (1.0-u-v);
-
-                numIntersections++;
+                // END PSUEDO-RECURSIVE CODE
+              done:
+              current = 0;
             }
         }
       }

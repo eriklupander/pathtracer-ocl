@@ -35,7 +35,7 @@ func NewCtx(id int, scene *scenes.Scene, canvas *canvas2.Canvas, samples int) *C
 // for the OCL pathtracer, call this in the main thread and pre-calculate all rays.
 func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 
-	sceneObjects, triangles := ocl.BuildSceneBufferCL(ctx.scene.Objects)
+	sceneObjects, triangles, groups := ocl.BuildSceneBufferCL(ctx.scene.Objects)
 
 	clCamera := ocl.CLCamera{
 		Width:       int32(ctx.camera.Width),
@@ -52,7 +52,7 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 	}
 
 	// Render the scene
-	result := ocl.Trace(sceneObjects, triangles, cmd.Cfg.DeviceIndex, height, ctx.samples, clCamera)
+	result := ocl.Trace(sceneObjects, triangles, groups, cmd.Cfg.DeviceIndex, height, ctx.samples, clCamera)
 
 	// result now contains RGBA values for each pixel,
 	j := 0
