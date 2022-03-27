@@ -10,15 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// BuildSceneBuffer maps shapes to a float64 slice:
-// Transform:        4x4 float64, offset: 0
-// Inverse:          4x4 float64, offset: 16
-// InverseTranspose: 4x4 float64, offset: 32
-// Color:            4xfloat64, offset: 48
-// Emission:         4xfloat64, offset: 52
-// RefractiveIndex:  1xfloat64, offset: 56
-// Type:             1xInt64, offset: 57
-
 //go:embed tracer.cl
 var kernelSource string
 
@@ -38,13 +29,11 @@ type CLObject struct {
 	MinY             float64     // 8 bytes
 	MaxY             float64     // 8 bytes
 	Reflectivity     float64     // 8 bytes
-	Padding3         int64       // 8 bytes
-	Padding4         int64       // 8 bytes == 448 + 56 == 504
 	BBMin            [4]float64  // 32 bytes
 	BBMax            [4]float64  // 32 bytes == 504 + 64 == 568
 	ChildCount       int32       // 4 bytes                 572
 	Children         [64]int32   // 64x4 == 256             828
-	Padding5         [196]byte
+	Padding5         [212]byte
 }
 
 type CLGroup struct {
@@ -55,22 +44,20 @@ type CLGroup struct {
 	TriOffset       int32      // 4 bytes
 	TriCount        int32      // 4 bytes
 	ChildGroupCount int32      // 4 bytes, should always be 2 or 0
-	Children        [16]int32  // 64 bytes, allow up to 16 subgroups.
-	Padding         [52]byte   // padding, 52 bytes (can be used as a label)
+	Children        [2]int32   // 8 bytes, allow 2 subgroups.
+	Padding         [108]byte  // padding, 108 bytes (can be used as a label)
 	// Total 256 bytes
 }
 
 type CLTriangle struct {
-	P1      [4]float64 // 32 bytes
-	P2      [4]float64 // 32 bytes
-	P3      [4]float64 // 32 bytes
-	E1      [4]float64 // 32 bytes (128)
-	E2      [4]float64 // 32 bytes
-	N       [4]float64 // 32 bytes (192)
-	N1      [4]float64 // 32 bytes
-	N2      [4]float64 // 32 bytes (256 here)
-	N3      [4]float64 // 32 bytes (288 here)
-	Padding [224]byte
+	P1 [4]float64 // 32 bytes
+	P2 [4]float64 // 32 bytes
+	P3 [4]float64 // 32 bytes
+	E1 [4]float64 // 32 bytes (128)
+	E2 [4]float64 // 32 bytes
+	N1 [4]float64 // 32 bytes
+	N2 [4]float64 // 32 bytes (256 here)
+	N3 [4]float64 // 32 bytes (288 here)
 	// Total 512 bytes
 }
 
@@ -100,20 +87,18 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 
 	if len(triangles) == 0 {
 		triangles = append(triangles, CLTriangle{
-			P1:      [4]float64{},
-			P2:      [4]float64{},
-			P3:      [4]float64{},
-			E1:      [4]float64{},
-			E2:      [4]float64{},
-			N:       [4]float64{},
-			N1:      [4]float64{},
-			N2:      [4]float64{},
-			N3:      [4]float64{},
-			Padding: [224]byte{},
+			P1: [4]float64{},
+			P2: [4]float64{},
+			P3: [4]float64{},
+			E1: [4]float64{},
+			E2: [4]float64{},
+			N1: [4]float64{},
+			N2: [4]float64{},
+			N3: [4]float64{},
 		})
 	}
 	if len(groups) == 0 {
-		groups = append(groups, CLGroup{Children: [16]int32{}, Padding: [52]byte{}})
+		groups = append(groups, CLGroup{Children: [2]int32{}, Padding: [108]byte{}})
 	}
 
 	platforms, err := cl.GetPlatforms()
@@ -235,7 +220,7 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, 
 	}
 	defer objectsBuffer.Release()
 
-	trianglesBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(triangles))
+	trianglesBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 256*len(triangles))
 	if err != nil {
 		logrus.Fatalf("CreateBuffer failed for triangles input: %+v", err)
 	}

@@ -1,6 +1,7 @@
 package scenes
 
 import (
+	"fmt"
 	"github.com/eriklupander/pathtracer-ocl/cmd"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/camera"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
@@ -56,20 +57,26 @@ func ModelScene() func() *Scene {
 			panic(err.Error())
 		}
 		model := obj.ParseObj(string(data))
-		group := model.ToGroup().Children[0].(*shapes.Group)
+		group := model.ToGroup()
+
+		// iterate over all triangles _before_ doing BVH divide to compute vertex normals since the teapot
+		// model doesn't have pre-computed vertex models stored in the .obj file.
 		tris := make([]*shapes.Triangle, 0)
-		for i := range group.Children {
-			tris = append(tris, group.Children[i].(*shapes.Triangle))
+		for i := range group.Children[0].(*shapes.Group).Children {
+			tris = append(tris, group.Children[0].(*shapes.Group).Children[i].(*shapes.Triangle))
 		}
 		obj.ComputeVertexNormals(tris)
+
 		group.Bounds()
 		group.SetTransform(geom.Translate(0, -0.4, 0.1))
 		group.SetTransform(geom.Scale(0.07, 0.07, 0.07))
 		silver := material.NewDiffuse(0.75, 0.75, 0.75)
-		silver.Reflectivity = 0.2
+		//silver.Reflectivity = 0.2
 		group.SetMaterial(silver)
-		shapes.Divide(group, 500)
+		shapes.Divide(group, 50)
 		group.Bounds()
+
+		fmt.Printf("distance from camera to teapot: %f", geom.Magnitude(geom.Sub(geom.NewPoint(0, -0.4, 0.1), geom.NewPoint(0, 0.13, -0.9))))
 
 		// lightsource
 		lightsource := shapes.NewSphere()

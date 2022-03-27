@@ -27,8 +27,8 @@ typedef struct __attribute__((packed)) tag_group {
     int triOffset;       // 4 bytes
     int triCount;        // 4 bytes
     int childGroupCount; // 4 bytes, should always be 2 or 0
-    int children[16];    // 64 bytes, allow up to 16 subgroups.
-    char padding[52];    // padding, 52 bytes (can be used as a label)
+    int children[2];     // 8 bytes, we only allow binary trees.
+    char padding[108];   // padding, 108 bytes (can be used as a label)
                          // Total 256 bytes
 } group;
 
@@ -43,19 +43,18 @@ typedef struct __attribute__((packed)) tag_object {
     double minY;               // 8 bytes. Used for cylinders.
     double maxY;               // 8 bytes. Used for cylinders.
     double reflectivity;       // 8 bytes
-    double padding3;           // 8 bytes
-    double padding4;           // 8 bytes                      // 512
     double4 bbMin;             // 32 bytes
     double4 bbMax;             // 32 bytes                     // 576
     int childCount;            // 4 bytes. Used for groups to know which "group" that's the root group.
     int children[64];          // 256 bytes
-    char padding5[196];        // 196 bytes                    // 1024
+    char padding5[212];        // 196 bytes                    // 1024
 } object;
 
 typedef struct tag_intersection {
     unsigned int objectIndex;
     double t;
-    double t2;
+    double4 color;      // while color and emission can be read from the "object" referenced by objectIndex,
+    double4 emission;   // 3D models organized into BVH trees needs to get their material from the intersected group of the tree.
 } intersection;
 
 typedef struct tag_bounce {
@@ -73,12 +72,10 @@ typedef struct __attribute__((packed)) tag_triangle {
     double4 p3;        // 32 bytes
     double4 e1;        // 32 bytes
     double4 e2;        // 32 bytes
-    double4 n;         // 32 bytes
     double4 n1;        // 32 bytes
     double4 n2;        // 32 bytes
     double4 n3;        // 32 bytes
-    char padding[224]; // 224 bytes
-} triangle;            // 512 total
+} triangle;            // 256 total
 
 inline double maxX(double a, double b, double c) { return max(max(a, b), c); }
 inline double minX(double a, double b, double c) { return min(min(a, b), c); }
@@ -407,7 +404,7 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                         for (int childIndex = 0; childIndex < objects[j].childCount; childIndex++) {
                             // START PSUEDO-RECURSIVE CODE
                             // 1) Create an empty stack. (move to top later)
-                            int stack[200] = {0}; // = make([]int, MAX_RECURSION_DEPTH)
+                            int stack[200] = {0};
 
                             // Stack index, i.e. current "depth" of stack
                             int currentSIndex = 0;

@@ -42,26 +42,14 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 
 			// Let's try a hack. If the group's direct children contains max 2 groups, we can pass it "as is". Otherwise,
 			// we need to split it into N children on this obj
-			cnt := 0
+			// we need to loop over the groups and add each one as a child index to this obj
+			idx := 0
 			for j := range in[i].(*shapes.Group).Children {
-				_, ok := in[i].(*shapes.Group).Children[j].(*shapes.Group)
+				group, ok := in[i].(*shapes.Group).Children[j].(*shapes.Group)
 				if ok {
-					cnt++
-				}
-			}
-
-			if cnt == 1 {
-				// when we encounter a single group...
-				obj.Children[0] = BuildCLGroup(in[i].(*shapes.Group))
-				obj.ChildCount = 1
-			} else {
-				// we need to loop over the groups and add each one as a child index to this obj
-				for j := range in[i].(*shapes.Group).Children {
-					group, ok := in[i].(*shapes.Group).Children[j].(*shapes.Group)
-					if ok {
-						obj.Children[j] = BuildCLGroup(group)
-						obj.ChildCount++
-					}
+					obj.Children[idx] = BuildCLGroup(group)
+					idx++
+					obj.ChildCount++
 				}
 			}
 
@@ -72,9 +60,7 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		obj.Reflectivity = in[i].GetMaterial().Reflectivity
 
 		// finally, pad!
-		obj.Padding3 = 0
-		obj.Padding4 = 0
-		obj.Padding5 = [196]byte{}
+		obj.Padding5 = [212]byte{}
 
 		objs = append(objs, obj)
 	}
@@ -90,7 +76,7 @@ func initToMinus1() [64]int32 {
 }
 
 func BuildCLGroup(group *shapes.Group) int32 {
-	groups = append(groups, CLGroup{Children: [16]int32{}, Padding: [52]byte{}})
+	groups = append(groups, CLGroup{Children: [2]int32{}, Padding: [108]byte{}})
 	globalGroupOffset++
 	localGroupID := globalGroupOffset
 	groups[localGroupID].Color = group.GetMaterial().Color
@@ -116,7 +102,7 @@ func BuildCLGroup(group *shapes.Group) int32 {
 				P3: tri.P3,
 				E1: tri.E1,
 				E2: tri.E2,
-				N:  tri.N,
+				//N:  tri.N,
 				N1: tri.N1,
 				N2: tri.N2,
 				N3: tri.N3,
