@@ -14,7 +14,7 @@ import (
 func GopherScene() func() *Scene {
 	return func() *Scene {
 
-		cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
+		cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.1, -1.5), geom.NewPoint(0, 0.05, 0))
 		cam.FocalLength = cmd.Cfg.FocalLength
 		cam.Aperture = cmd.Cfg.Aperture
 		// left wall
@@ -51,7 +51,17 @@ func GopherScene() func() *Scene {
 		frontWall.SetTransform(geom.RotateX(math.Pi / 2))
 		frontWall.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
 
-		objects := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, frontWall}
+		// right sphere
+		rightSphere := shapes.NewSphere()
+		rightSphere.SetTransform(geom.Translate(0.28, -0.24, 0.15))
+		rightSphere.SetTransform(geom.Scale(0.16, 0.16, 0.16))
+		//rightSphere.SetMaterial(material.NewDiffuse(0.57, 0.86, 1))
+		halfMirror := material.NewMirror()
+		halfMirror.Reflectivity = 0.8
+		halfMirror.Color = geom.NewColor(0.97, 0.97, 0.843)
+		rightSphere.SetMaterial(halfMirror)
+
+		objects := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, frontWall, rightSphere}
 
 		data, err := ioutil.ReadFile("assets/gopher.obj")
 		if err != nil {
@@ -61,10 +71,10 @@ func GopherScene() func() *Scene {
 		group := model.ToGroup()
 		group.Bounds()
 
-		group.SetTransform(geom.Translate(0, -0.2, 0.3))
+		group.SetTransform(geom.Translate(-.4, -0.14, 0.2))
 		group.SetTransform(geom.RotateZ(-math.Pi / 2))
-		group.SetTransform(geom.RotateX(-math.Pi / 2))
-		group.SetTransform(geom.Scale(0.15, 0.15, 0.15))
+		group.SetTransform(geom.RotateX(-math.Pi / 4))
+		group.SetTransform(geom.Scale(0.2, 0.2, 0.2))
 		silver := material.NewDiffuse(0.75, 0.75, 0.75)
 		silver.Reflectivity = 0.2
 		group.SetMaterial(silver)
@@ -79,6 +89,15 @@ func GopherScene() func() *Scene {
 		light.Emission = geom.NewColor(9, 8, 6)
 		lightsource.SetMaterial(light)
 		objects = append(objects, lightsource)
+
+		// lightsource
+		//lightsource2 := shapes.NewSphere()
+		//lightsource2.SetTransform(geom.Translate(0, 0.1, -1.7))
+		//lightsource2.SetTransform(geom.Scale(0.2, 0.2, 0.2))
+		//light2 := material.NewLightBulb()
+		//light2.Emission = geom.NewColor(9,9,9)
+		//lightsource2.SetMaterial(light2)
+		//objects = append(objects, lightsource2)
 		return &Scene{
 			Camera:  cam,
 			Objects: objects,

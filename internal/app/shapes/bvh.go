@@ -81,6 +81,7 @@ var subgroupCounter = 0
 func MakeSubGroup(g *Group, shapes ...Shape) {
 	subgroupCounter++
 	subgroup := NewGroup()
+	subgroup.Material = g.GetMaterial()
 	subgroup.Label = fmt.Sprintf("Subgroup %v", subgroupCounter)
 	for i := range shapes {
 		subgroup.AddChild(shapes[i])

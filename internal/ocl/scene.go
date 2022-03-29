@@ -79,8 +79,8 @@ func BuildCLGroup(group *shapes.Group) int32 {
 	groups = append(groups, CLGroup{Children: [2]int32{}, Padding: [108]byte{}})
 	globalGroupOffset++
 	localGroupID := globalGroupOffset
-	groups[localGroupID].Color = group.GetMaterial().Color
-	groups[localGroupID].Emission = group.GetMaterial().Emission
+	// materials are tricky. .obj allows changing materials within a group (gopher's eyes for example)
+	// so we need to pass color and emission for every single triangle over to OpenCL... :(
 	groups[localGroupID].BBMin = group.BoundingBox.Min
 	groups[localGroupID].BBMax = group.BoundingBox.Max
 
@@ -97,15 +97,16 @@ func BuildCLGroup(group *shapes.Group) int32 {
 		tri, ok := child.(*shapes.Triangle)
 		if ok {
 			clTriangle := CLTriangle{
-				P1: tri.P1,
-				P2: tri.P2,
-				P3: tri.P3,
-				E1: tri.E1,
-				E2: tri.E2,
-				//N:  tri.N,
-				N1: tri.N1,
-				N2: tri.N2,
-				N3: tri.N3,
+				P1:      tri.P1,
+				P2:      tri.P2,
+				P3:      tri.P3,
+				E1:      tri.E1,
+				E2:      tri.E2,
+				N1:      tri.N1,
+				N2:      tri.N2,
+				N3:      tri.N3,
+				Color:   tri.GetMaterial().Color,
+				Padding: [224]byte{},
 			}
 			triangles = append(triangles, clTriangle)
 			localTrianglesAdded++

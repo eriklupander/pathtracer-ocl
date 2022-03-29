@@ -50,14 +50,16 @@ type CLGroup struct {
 }
 
 type CLTriangle struct {
-	P1 [4]float64 // 32 bytes
-	P2 [4]float64 // 32 bytes
-	P3 [4]float64 // 32 bytes
-	E1 [4]float64 // 32 bytes (128)
-	E2 [4]float64 // 32 bytes
-	N1 [4]float64 // 32 bytes
-	N2 [4]float64 // 32 bytes (256 here)
-	N3 [4]float64 // 32 bytes (288 here)
+	P1      [4]float64 // 32 bytes
+	P2      [4]float64 // 32 bytes
+	P3      [4]float64 // 32 bytes
+	E1      [4]float64 // 32 bytes (128)
+	E2      [4]float64 // 32 bytes
+	N1      [4]float64 // 32 bytes
+	N2      [4]float64 // 32 bytes
+	N3      [4]float64 // 32 bytes (256 here)
+	Color   [4]float64 // 32 bytes (288 bytes)
+	Padding [224]byte
 	// Total 512 bytes
 }
 
@@ -220,7 +222,7 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, 
 	}
 	defer objectsBuffer.Release()
 
-	trianglesBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 256*len(triangles))
+	trianglesBuffer, err := context.CreateEmptyBuffer(cl.MemReadOnly, 512*len(triangles))
 	if err != nil {
 		logrus.Fatalf("CreateBuffer failed for triangles input: %+v", err)
 	}

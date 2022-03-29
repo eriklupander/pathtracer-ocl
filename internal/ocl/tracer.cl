@@ -67,15 +67,17 @@ typedef struct tag_bounce {
 } bounce;
 
 typedef struct __attribute__((packed)) tag_triangle {
-    double4 p1;        // 32 bytes
-    double4 p2;        // 32 bytes
-    double4 p3;        // 32 bytes
-    double4 e1;        // 32 bytes
-    double4 e2;        // 32 bytes
-    double4 n1;        // 32 bytes
-    double4 n2;        // 32 bytes
-    double4 n3;        // 32 bytes
-} triangle;            // 256 total
+    double4 p1;           // 32 bytes
+    double4 p2;           // 32 bytes
+    double4 p3;           // 32 bytes
+    double4 e1;           // 32 bytes
+    double4 e2;           // 32 bytes
+    double4 n1;           // 32 bytes
+    double4 n2;           // 32 bytes
+    double4 n3;           // 32 bytes
+    double4 color;        // 32 bytes (288 bytes)
+    char	padding[224]; // 224 bytes
+} triangle;               // 512 total
 
 inline double maxX(double a, double b, double c) { return max(max(a, b), c); }
 inline double minX(double a, double b, double c) { return min(min(a, b), c); }
@@ -252,6 +254,8 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
             double intersections[32] = {0};   // t of an intersection
             unsigned int xsObjects[32] = {0}; // index maps to each xs above, value to objects
             double4 xsTriangle[32] = {0};
+            double4 xsTriangleColor[32] = {0};
+            double4 xsTriangleEmission[32] = {0};
             // ----------------------------------------------------------
             // Loop through scene objects in order to find intersections
             // ----------------------------------------------------------
@@ -451,6 +455,9 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                                         // but can separate their normals and then only use the one for the nearest intersection
                                         xsTriangle[numIntersections] = triangles[n].n2 * u + triangles[n].n3 * v + triangles[n].n1 * (1.0 - u - v);
 
+                                        // experiment: record the color and emission of the intersection
+                                        xsTriangleColor[numIntersections] = triangles[n].color;
+                                        xsTriangleEmission[numIntersections] = (double4){0,0,0,0}; //triangles[n].emission;
                                         numIntersections++;
                                     }
 
@@ -610,8 +617,14 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                 double cosine = dot(rayDirection, normalVec);
 
                 // Finish this iteration by storing the bounce.
-                bounce bnce = {position, cosine, obj.color, obj.emission};
-                bounces[b] = bnce;
+                if (obj.type == 4) {
+                    bounce bnce = {position, cosine, xsTriangleColor[normalIndex], xsTriangleEmission[normalIndex]};
+                    bounces[b] = bnce;
+                } else {
+                    bounce bnce = {position, cosine, obj.color, obj.emission};
+                    bounces[b] = bnce;
+                }
+
                 actualBounces++;
             }
         }
