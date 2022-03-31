@@ -1,6 +1,6 @@
 # pathtracer-ocl
-Pathtracer written in Go and OpenCL
-![example](images/aa-with-box-and-cyl.png)
+Path tracer written in Go and OpenCL
+![example](images/gopher-in-a-corner.png)
 _(2048 samples)_
 
 ## Description
@@ -12,8 +12,7 @@ Supports:
 * Movable camera
 * Anti-aliasing
 * Depth of Field with simple focal length and camera aperture.
-* .OBJ model loading and rendering, incl computing vertex normals and bounding boxes. Each model goes into one bounding box, so not efficient.
-* Can generate BVH trees Go-side, but not yet render those OpenCL-side. (high on the todo list)
+* .OBJ model loading and rendering with BVH support, incl computing vertex normals.
 
 Based on or inspired by:
 
@@ -21,20 +20,6 @@ Based on or inspired by:
 * Mask/accumulated color shading by Sam Lapere at https://raytracey.blogspot.com/2016/11/opencl-path-tracing-tutorial-2-path.html
 * Ray in hemisphere code by Hunter Loftis at https://github.com/hunterloftis/pbr/blob/1ce8b1c067eea7cf7298745d6976ba72ff12dd50/pkg/geom/dir.go
 * And my own mashup of the three above, a simple and Go-native path-tracer https://github.com/eriklupander/pathtracer
-
-Next steps:
-* Render triangle groups structured into BVH trees. Given that recursion is forbidden in OpenCL, as well as variable-length arrays cannot be passed to OpenCL without careful management of struct sizes, "numberOfNN" fields etc, incorporating 3D model rendering with acceptable performance is non-trivial.
-
-The overall solution is _probably_ to:
-* Pass ALL triangles (for all models) in a long continous array, each triangle will have pre-computed vertex/surface normals etc and consume 256 or 512 bytes each.
-* Organize models into a BVH hierarchy of groups. 
-  * All groups goes into a contingous array of groups.
-  * Each group has a bounding box
-  * Each group has a int[16] array for indexes to subgroups
-  * Each group has two fields: trianglesOffset and trianglesSize, these are used to reference into the `triangles` array. I.e. in "go terms", `triangles[trianglesOffset:trianglesOffset+trianglesSize]`.
-* A challenge here is that traversing the BVH must be done using for-loops and a local "stack" rather than recursion.
-  * Also, since each "subgroup" may have its own "subtranslation" in relation to its parent, we may need to keep a stack of translations around as well.
-    * It may be possible to let each group within a group (forming a mesh) to have an absolute world-based transform rather than one in relation to its parent.
 
 ## Usage
 A few command-line args have been added to simplify testing things.
@@ -55,7 +40,7 @@ Example:
 go run cmd/pt/main.go --samples 2048 --aperture 0.15 --focal-length 1.6 --width 1280 --height 960
 ```
 
-Note! The project probably only works on AMD64 since there's some leftover PLAN9 assembly generated from C AVX2 instrinsics, which is unlikely to work well on M1 Macs with ARM CPUs.
+Note! The project probably only works on AMD64 CPUs since there's some leftover PLAN9 assembly generated from C AVX2 instrinsics, which is unlikely to work well on M1 Macs with ARM CPUs.
 
 ### Listing and selecting a device
 Not all OpenCL devices are created equal. On the author's semi-ancient MacBook Pro 2014, running `go run cmd/pt/main.go --list-devices` yields:
@@ -96,7 +81,7 @@ The current DoF has some issues producing slight artifacts, probably due to how 
 ### Teapot
 The classic. Here a 1280x960 render using 2048 samples:
 ![Teapot](images/teapot-hires.png)
-_(Due to a single naive bounding box around all ~6500 triangles, rendering this image was extremely slow, about 7.5 hours on a MacBook Pro 2014)_
+_(Due to a single naive bounding box around all ~6500 triangles, rendering this image was extremely slow, about 7.5 hours on a MacBook Pro 2014)_. After adding a BVH with 500 triangles per node, the rendering went down to 1h42m. A render with about 75 triangles per node seems to be optimal in this scene, TBD full render!
 
 ### Depth of Field
 Depth-of-field effect is accomplished through casting a standard camera->pixel ray into the scene, and then creating a new "focal point" by using focal distance (distance to a point along camera ray). A new random origin point is then randomly picked around the camera origin with r==aperture and a _new_ ray is cast from the new camera through the focal point, resulting in objects not near the focal point to appear increasingly out-of focus.
@@ -113,3 +98,17 @@ Examples rendered in 640x480 with 512 samples:
 
 #### With anti-aliasing:
 ![noaa](images/aa.png)
+
+
+## Some tidbits on model rendering
+The program now (march 2022) supports rendering .OBJ models as triangle groups structured into BVH trees. Given that recursion is forbidden in OpenCL, as well as variable-length arrays cannot be passed to OpenCL without careful management of struct sizes, "numberOfNN" fields etc, incorporating 3D model rendering with acceptable performance was non-trivial.
+
+The overall solution:
+* We have three types of "objects" that can be passed over to OpenCL
+  * Objects. These are planes, spheres, cubes and cylinders, as well as "groups"
+  * A group has a translation etc, but consists of 0-64 child subgroups, where each child subgroup typically is a partial mesh from an .OBJ file.
+  * Each subgroup has a bounding box, may reference an arbitrary number of triangles and have 2 child subgroups. The subgroups form a binary tree. 
+  * Triangles. All triangles for all models goes into a single array of triangles with pre-computed vertex normals, material color/emission and consume 512 bytes each.
+  
+A challenge here was that traversing the subgroup tree must be done using for-loops and a local "stack" rather than recursion.
+ 
