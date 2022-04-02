@@ -89,6 +89,10 @@ Depth-of-field effect is accomplished through casting a standard camera->pixel r
 1280x960, 2048 samples, focal length 1.6, aperture 0.15.
 ![DoF](images/DoF-2048.png)
 
+### Lonesome window with DoF
+![Lonesome window](images/lone-window-4096-in46m47s.png)
+4096 samples. Bad use-case for brute-force path tracing.
+
 ### Anti-aliasing
 Anti-aliasing is accomplished through the age-old trick of casting each ray through a random location in the pixel. Given enough samples, an anti-aliased effect will occurr.
 

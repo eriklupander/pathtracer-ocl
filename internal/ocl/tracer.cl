@@ -79,6 +79,43 @@ typedef struct __attribute__((packed)) tag_triangle {
     char	padding[224]; // 224 bytes
 } triangle;               // 512 total
 
+inline int round2(double number) {
+   int sign = (int)((number > 0) - (number < 0));
+   int odd = ((int)number % 2); // odd -> 1, even -> 0
+   return ((int)(number-sign*(0.5-odd)));
+}
+
+
+inline double sunflowerRadius(double i, double n, double b) {
+  double r = 1.0; // put on boundary
+   if (i <= (n - b)) {
+      r = sqrt(i-0.5) / sqrt(n-(b+1.0)/2.0); // apply square root
+   }
+   return r;
+}
+
+// Distributes n points evenly within a circle with sunflowerRadius 1
+// alpha controls point distribution on the edge. Typical values 1-2, higher values more points on the edge.
+// i is the index of a point. It is in the range [1,n] .
+// https://stackoverflow.com/questions/28567166/uniformly-distribute-x-points-inside-a-circle
+//
+// // example: amountPoints=500, alpha=2, pointNumber=[1..amountPoints]
+inline double2 sunflower(int amountPoints, double alpha, int pointNumber, bool randomize, double rand) {
+   double pointIndex = (double) pointNumber;  //float64(pointNumber)
+   if (randomize) {
+      pointIndex += rand - 0.5;
+   }
+
+   double sqp = sqrt(convert_double(amountPoints));
+   double b = round(alpha * sqp); // number of boundary points
+   double phi = (sqrt(5.0) + 1.0) / 2.0;                                // golden ratio
+   double r = sunflowerRadius(pointIndex, amountPoints, b);
+   double theta = 2.0 * PI * pointIndex / (phi * phi);
+
+   return (double2)(r * cos(theta), r * sin(theta));
+}
+
+
 inline double maxX(double a, double b, double c) { return max(max(a, b), c); }
 inline double minX(double a, double b, double c) { return min(min(a, b), c); }
 
@@ -191,7 +228,7 @@ inline double4 mul(double16 mat, double4 vec) {
                      elem4.x + elem4.y + elem4.z + elem4.w);
 }
 
-inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, float rndY) {
+inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, float rndY, int sample, int totalSamples) {
     double4 pointInView = {0.0, 0.0, -1.0, 1.0};
     double4 originPoint = {0.0, 0.0, 0.0, 1.0};
     double xOffset = cam.pixelSize * ((double)x + rndX);
@@ -212,8 +249,12 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
 
         double4 pos = origin + direction * cam.focalLength;
         double4 newOrigin = {};
-        newOrigin.x = origin.x + (-cam.aperture + rndY * cam.aperture * 2);
-        newOrigin.y = origin.y + (-cam.aperture + rndX * cam.aperture * 2);
+        double2 xy = sunflower(totalSamples, 2, sample, false, rndX);
+        //printf("X: %f Y: %f ", xy.x, xy.y);
+        newOrigin.x = origin.x + (xy.y * cam.aperture);
+        newOrigin.y = origin.y + (xy.x * cam.aperture);
+//        newOrigin.x = origin.x + (-cam.aperture + xy.y * cam.aperture * 2);
+//        newOrigin.y = origin.y + (-cam.aperture + xy.x * cam.aperture * 2);
         newOrigin.z = origin.z;
         newOrigin.w = 1.0;
         direction = pos - newOrigin;
@@ -241,21 +282,21 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
 
     for (unsigned int n = 0; n < samples; n++) {
         // For each sample, compute a new ray cast through the target (x,y) pixel with random offset within the pixel.
-        ray r = rayForPixel(x, y, *cam, noise3D(fgi, n, fgi2), noise3D(fgi, fgi2, n));
+        ray r = rayForPixel(x, y, *cam, noise3D(fgi, n, fgi2), noise3D(fgi, fgi2, n), n, samples);
         double4 rayOrigin = r.origin;
         double4 rayDirection = r.direction;
 
         unsigned int actualBounces = 0;
         // Each ray may bounce up to 5 times
-        bounce bounces[5] = {};
+        bounce bounces[16] = {};
         for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
 
             // track up to 16 intersections per ray.
-            double intersections[32] = {0};   // t of an intersection
-            unsigned int xsObjects[32] = {0}; // index maps to each xs above, value to objects
-            double4 xsTriangle[32] = {0};
-            double4 xsTriangleColor[32] = {0};
-            double4 xsTriangleEmission[32] = {0};
+            double intersections[64] = {0};   // t of an intersection
+            unsigned int xsObjects[64] = {0}; // index maps to each xs above, value to objects
+            double4 xsTriangle[64] = {0};
+            double4 xsTriangleColor[64] = {0};
+            double4 xsTriangleEmission[64] = {0};
             // ----------------------------------------------------------
             // Loop through scene objects in order to find intersections
             // ----------------------------------------------------------
@@ -640,6 +681,10 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
             // First, ADD current accumulated color with the hadamard of the current
             // mask and the emission properties of the hit object.
             accumColor = accumColor + mask * bounces[x].emission;
+            // experiment. If we've hit a light source, stop bouncing...
+            if (bounces[x].emission.x > 0.0) {
+                break;
+            }
 
             // Update the mask by multiplying it with the hit object's color
             mask *= bounces[x].color;
