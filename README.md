@@ -53,6 +53,17 @@ However, the Iris Pro iGPU does not support double-precision floating point numb
 
 _Note: At some point, the path tracer stopped working on the **GeForce GT 750M**. Works fine on more modern GPUs..._
 
+### Running on Windows
+Given a nVidia GPU on Windows 10, a few env vars needs to be set. nVidia includes the OpenCL header and lib in their CUDA installation which by default seems to be installed at `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.5` which needs to be shortened. See example below:
+
+
+```shell
+set CGO_ENABLED=1
+set CGO_CFLAGS=-I C:\PROGRA~1\NVIDIA~2\CUDA\v11.5\include
+set CGO_LDFLAGS=-L C:\PROGRA~1\NVIDIA~2\CUDA\v11.5\lib\x64
+go build cmd/pt/main.go
+```
+
 ## Performance
 For this _reference image_ at 1280x960:
 ![example](images/reference.png)
@@ -80,6 +91,7 @@ The king is unsurprisingly enough the GeForce RTX 2080 on my Desktop PC, which i
 #### Teapot
 Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: 57m
 NVIDIA GeForce RTX 2080, 256 wgsize: 47m
+NVIDIA GeForce RTX 2080, 256 wgsize all lines in a single chunk: 29m20s. (Also, a few other optimizations had been done, especially regarding bounding box intersection testing)
 
 #### Gopher
 Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: ??? 
@@ -87,9 +99,11 @@ NVIDIA GeForce RTX 2080: 47m
 
 Clearly, the GPU underperforms enormously with 3D model rendering. Gopher is about 16000 triangles, Teapot 6500 triangles. Both use BVH trees with semi-optimized group sizes.
 
-## Issues
-The current DoF has some issues producing slight artifacts, probably due to how random numbers are seeded for the aperture-based ray origin.
+Note that GPU usage (RTX2080) is 100% according to MSI Afterburner, so the GPU is doing all it can. It seems something is really inefficient though.
 
+## Issues
+--The current DoF has some issues producing slight artifacts, probably due to how random numbers are seeded for the aperture-based ray origin.--
+Issue fixed after adding sunflower-based camera aperture sampling.
 ## Gallery
 ### Teapot
 The classic. Here a 1280x960 render using 2048 samples:
