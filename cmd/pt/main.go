@@ -52,6 +52,8 @@ func main() {
 		scene = scenes.ModelScene()
 	case "gopher":
 		scene = scenes.GopherScene()
+	case "gopher-window":
+		scene = scenes.GopherWindowScene()
 	default:
 		scene = scenes.OCLScene()
 	}

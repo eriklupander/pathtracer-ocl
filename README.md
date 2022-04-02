@@ -89,9 +89,15 @@ Depth-of-field effect is accomplished through casting a standard camera->pixel r
 1280x960, 2048 samples, focal length 1.6, aperture 0.15.
 ![DoF](images/DoF-2048.png)
 
+### Lonesome window with Gopher and DoF
+![Lonesome window](images/gopher-with-side-window-2048.png)
+2048 samples. Combines a "window" with lengthened cornell box, reflective sphere and the Gopher model.
+
+The window is made from an almost flat "light" cube with 4 cubes as window lining.
+
 ### Lonesome window with DoF
 ![Lonesome window](images/lone-window-4096-in46m47s.png)
-4096 samples. Bad use-case for brute-force path tracing.
+4096 samples. Bad use-case for brute-force path tracing. Similar to scene above, with Gopher and roof light removed.
 
 ### Anti-aliasing
 Anti-aliasing is accomplished through the age-old trick of casting each ray through a random location in the pixel. Given enough samples, an anti-aliased effect will occurr.
