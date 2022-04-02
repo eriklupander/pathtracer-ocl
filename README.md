@@ -74,6 +74,19 @@ In this scenario, the 8-core Core i9 CPU is more than twice as fast as the 4-cir
 
 The king is unsurprisingly enough the GeForce RTX 2080 on my Desktop PC, which is almost 6x faster than the 8-core Intel CPU.
 
+### With 3D models
+1280x960, 2048 samples.
+
+#### Teapot
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: 57m
+NVIDIA GeForce RTX 2080, 256 wgsize: 47m
+
+#### Gopher
+Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: ??? 
+NVIDIA GeForce RTX 2080: 47m
+
+Clearly, the GPU underperforms enormously with 3D model rendering. Gopher is about 16000 triangles, Teapot 6500 triangles. Both use BVH trees with semi-optimized group sizes.
+
 ## Issues
 The current DoF has some issues producing slight artifacts, probably due to how random numbers are seeded for the aperture-based ray origin.
 
