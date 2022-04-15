@@ -52,6 +52,28 @@ func ModelScene() func() *Scene {
 		frontWall.SetTransform(geom.RotateX(math.Pi / 2))
 		frontWall.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
 
+		// left sphere
+		leftSphere := shapes.NewSphere()
+		leftSphere.SetTransform(geom.Translate(-0.35, -0.3, 0.15))
+		leftSphere.SetTransform(geom.Scale(0.1, 0.1, 0.1))
+		leftSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
+
+		// cylinder
+		cyl := shapes.NewCylinderMMC(0, 0.4, true)
+		cyl.SetTransform(geom.Translate(0.45, -0.5, 0.2))
+		//cyl.SetTransform(geom.RotateY(math.Pi / 4))
+		//cyl.SetTransform(geom.RotateZ(math.Pi / 2))
+		cyl.SetTransform(geom.Scale(0.075, 1, 0.075))
+		cyl.SetMaterial(material.NewDiffuse(0.92, 0.4, 0.8))
+
+		// cube
+		cube := shapes.NewCube()
+		cube.SetTransform(geom.Translate(0.1, -0.1, 0.1))
+		cube.SetTransform(geom.Scale(0.1, 0.05, 0.04))
+		cube.SetTransform(geom.RotateY(math.Pi / 4))
+		cube.SetTransform(geom.RotateZ(math.Pi / 2))
+		cube.SetMaterial(material.NewDiffuse(0.25, 0.25, 0.75))
+
 		data, err := ioutil.ReadFile("assets/teapot.obj")
 		if err != nil {
 			panic(err.Error())

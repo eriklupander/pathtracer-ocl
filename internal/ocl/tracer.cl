@@ -60,7 +60,6 @@ typedef struct tag_intersection {
 typedef struct tag_bounce {
     double4 point;
     double cos;
-    double inCosine;
     double4 color;
     double4 emission;
     double4 normal;
@@ -230,6 +229,109 @@ inline double4 mul(double16 mat, double4 vec) {
                      elem4.x + elem4.y + elem4.z + elem4.w);
 }
 
+inline double2 intersectCube(double4 tRayOrigin, double4 tRayDirection) {
+    double2 out = (0,0);
+    // There is supposed to be a way to optimize this for fewer checks by looking at early values.
+    double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x, -1.0, 1.0);
+    double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y, -1.0, 1.0);
+    double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z, -1.0, 1.0);
+
+    // Om det största av min-värdena är större än det minsta max-värdet.
+    double tmin = maxX(xt.x, yt.x, zt.x);
+    double tmax = minX(xt.y, yt.y, zt.y);
+    if (tmin > tmax) {
+        return out;
+    }
+    out.x = tmin;
+    out.y = tmax;
+    return out;
+}
+
+inline double4 intersectCylinder(double4 tRayOrigin, double4 tRayDirection, object obj) {
+    double4 out={0,0,0,0};
+    double rdx2 = tRayDirection.x * tRayDirection.x;
+    double rdz2 = tRayDirection.z * tRayDirection.z;
+
+    double a = rdx2 + rdz2;
+    if (fabs(a) < 0.0001) {
+        // c.intercectCaps(ray, xs)
+        return out;
+    }
+
+    double b = 2 * tRayOrigin.x * tRayDirection.x + 2 * tRayOrigin.z * tRayDirection.z;
+
+    double rox2 = tRayOrigin.x * tRayOrigin.x;
+    double roz2 = tRayOrigin.z * tRayOrigin.z;
+
+    double c1 = rox2 + roz2 - 1;
+
+    double disc = b * b - 4 * a * c1;
+
+    // ray does not intersect the cylinder
+    if (disc < 0.0) {
+        return out;
+    }
+
+    double t0 = (-b - sqrt(disc)) / (2 * a);
+    double t1 = (-b + sqrt(disc)) / (2 * a);
+
+    double y0 = tRayOrigin.y + t0 * tRayDirection.y;
+
+    if (y0 > obj.minY && y0 < obj.maxY) {
+        // add intersection
+        out.x = t0;
+    }
+
+    double y1 = tRayOrigin.y + t1 * tRayDirection.y;
+    if (y1 > obj.minY && y1 < obj.maxY) {
+        // add intersection
+        out.y = t1;
+    }
+
+    // TODO fix caps
+    double2 caps = intersectCaps(tRayOrigin, tRayDirection, obj.minY, obj.maxY);
+    if (caps.x > 0.0) {
+        out.z = caps.x;
+    }
+    if (caps.y > 0.0) {
+        out.w = caps.y;
+    }
+    return out;
+}
+
+inline double intersectSphere(double4 tRayOrigin, double4 tRayDirection) {
+    // this is a vector from the origin of the ray to the center of the
+                // sphere at 0,0,0
+    double4 vecToCenter = tRayOrigin - ((double4)(0.0, 0.0, 0.0, 1.0));
+
+    // This dot product is always 1.0 if tRayDirection is normalized. Which it isn't.
+    double a = dot(tRayDirection, tRayDirection);
+
+    // Take the dot of the direction and the vector from ray origin to
+    // sphere center times 2
+    double b = 2.0 * dot(tRayDirection, vecToCenter);
+
+    // Take the dot of the two sphereToRay vectors and decrease by 1 (is
+    // that because the sphere is unit length 1?
+    double c = dot(vecToCenter, vecToCenter) - 1.0;
+
+    // calculate the discriminant
+    double discriminant = (b * b) - 4 * a * c;
+    if (discriminant > 0.0) {
+        // finally, find the intersection distances on our ray.
+        double t1 = (-b - sqrt(discriminant)) / (2 * a);
+        return t1;
+    }
+    return 0.0;
+}
+
+inline double intersectPlane(double4 tRayOrigin, double4 tRayDirection) {
+    if (fabs(tRayDirection.y) > 0.0001) {
+            return -tRayOrigin.y / tRayDirection.y;
+    }
+    return 0.0;
+}
+
 inline bool intersectShadowRay(double4 rayOrigin, double4 rayDirection, __global object *objects, __global group *groups, __global triangle *triangles, unsigned int numObjects, unsigned int doNotIntersect, double minT) {
     double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
     for (unsigned int j = 0; j < numObjects; j++) {
@@ -243,114 +345,31 @@ inline bool intersectShadowRay(double4 rayOrigin, double4 rayDirection, __global
         double4 tRayDirection = mul(objects[j].inverse, rayDirection);
 
         // Intersection code
-        if (objType == 0) { // PLANE - intersect transformed ray with plane
-            if (fabs(tRayDirection.y) > 0.0001) {
-                double t = -tRayOrigin.y / tRayDirection.y;
-
-                if (t > 0 && t <= minT - 0.1) {
-                    //printf("intersect plane at %f\n", t);
-                    return true;
-                }
-            }
-        } else if (objType == 1) { // SPHERE
-            // this is a vector from the origin of the ray to the center of the
-            // sphere at 0,0,0
-            double4 vecToCenter = tRayOrigin - originPoint;
-
-            // This dot product is always 1.0 if tRayDirection is normalized. Which it isn't.
-            double a = dot(tRayDirection, tRayDirection);
-
-            // Take the dot of the direction and the vector from ray origin to
-            // sphere center times 2
-            double b = 2.0 * dot(tRayDirection, vecToCenter);
-
-            // Take the dot of the two sphereToRay vectors and decrease by 1 (is
-            // that because the sphere is unit length 1?
-            double c = dot(vecToCenter, vecToCenter) - 1.0;
-
-            // calculate the discriminant
-            double discriminant = (b * b) - 4 * a * c;
-            if (discriminant > 0.0) {
-                // finally, find the intersection distances on our ray.
-                double t1 = (-b - sqrt(discriminant)) / (2 * a);
-                if (t1 < minT) {
-                    return true;
-                }
-            }
-        } else if (objType == 2) { // CYLINDER
-                                   // Cylinder intersection
-            double rdx2 = tRayDirection.x * tRayDirection.x;
-            double rdz2 = tRayDirection.z * tRayDirection.z;
-
-            double a = rdx2 + rdz2;
-            if (fabs(a) < 0.0001) {
-                // c.intercectCaps(ray, xs)
-                continue;
-            }
-
-            double b = 2 * tRayOrigin.x * tRayDirection.x + 2 * tRayOrigin.z * tRayDirection.z;
-
-            double rox2 = tRayOrigin.x * tRayOrigin.x;
-            double roz2 = tRayOrigin.z * tRayOrigin.z;
-
-            double c1 = rox2 + roz2 - 1;
-
-            double disc = b * b - 4 * a * c1;
-
-            // ray does not intersect the cylinder
-            if (disc < 0.0) {
-                continue;
-            }
-
-            double t0 = (-b - sqrt(disc)) / (2 * a);
-            double t1 = (-b + sqrt(disc)) / (2 * a);
-
-            double y0 = tRayOrigin.y + t0 * tRayDirection.y;
-
-            if (y0 > objects[j].minY && y0 < objects[j].maxY) {
-                if (t0 < minT) {
-                    return true;
-                }
-            }
-
-            double y1 = tRayOrigin.y + t1 * tRayDirection.y;
-            if (y1 > objects[j].minY && y1 < objects[j].maxY) {
-                if (t1 < minT) {
-                    return true;
-                }
-            }
-
-            // TODO fix caps
-            double2 caps = intersectCaps(tRayOrigin, tRayDirection, objects[j].minY, objects[j].maxY);
-            if (caps.x > 0.0) {
-                if (caps.x < minT) {
-                    return true;
-                }
-            }
-            if (caps.y > 0.0) {
-                if (caps.y < minT) {
-                    return true;
-                }
-            }
-        } else if (objType == 3) { // BOX
-            // There is supposed to be a way to optimize this for fewer checks by looking at early values.
-            double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x, -1.0, 1.0);
-            double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y, -1.0, 1.0);
-            double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z, -1.0, 1.0);
-
-            // Om det största av min-värdena är större än det minsta max-värdet.
-            double tmin = maxX(xt.x, yt.x, zt.x);
-            double tmax = minX(xt.y, yt.y, zt.y);
-            if (tmin > tmax) {
-                // No intersection
-                continue;
-            }
-
-            if (tmin < minT) {
+        if (objType == 0) { // PLANE
+            double t = intersectPlane(tRayOrigin, tRayDirection);
+            if (t > 0 && t <= minT - 0.1) {
                 return true;
             }
+        } else if (objType == 1) { // SPHERE
 
-            if (tmax < minT) {
+            double t1 = intersectSphere(tRayOrigin, tRayDirection);
+            if (t1 > 0.0 && t1 < minT) {
+                return true;
+            }
+        } else if (objType == 2) { // CYLINDER
+            double4 out = intersectCylinder(tRayOrigin, tRayDirection, objects[j]);
+            for (unsigned int a = 0; a < 3; a++) {
+                if (out[a] > 0.0 && out[a] < minT) {
+                    return true;
+                }
+            }
+
+        } else if (objType == 3) { // BOX
+            double2 out = intersectCube(tRayOrigin, tRayDirection);
+            if (out.x > 0.0 && out.x < minT) {
+                return true;
+            }
+            if (out.y > 0.0 && out.y < minT) {
                 return true;
             }
         } else if (objType == 4) { // GROUPS
@@ -379,7 +398,7 @@ inline bool intersectShadowRay(double4 rayOrigin, double4 rayDirection, __global
                 for (int childIndex = 0; childIndex < objects[j].childCount; childIndex++) {
                     // START PSUEDO-RECURSIVE CODE
                     // 1) Create an empty stack. (move to top later)
-                    int stack[200] = {0};
+                    int stack[64] = {0};
 
                     // Stack index, i.e. current "depth" of stack
                     int currentSIndex = 0;
@@ -507,6 +526,7 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
     return r;
 }
 
+
 __kernel void trace(__global object *objects, const unsigned int numObjects, __global triangle *triangles, __global group *groups, __global double *output,
                     __global double *seedX, const unsigned int samples, __global camera *cam, const unsigned int yOffset) {
 
@@ -554,118 +574,47 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
 
                 // Intersection code
                 if (objType == 0) { // PLANE - intersect transformed ray with plane
-                    if (fabs(tRayDirection.y) > 0.0001) {
-                        double t = -tRayOrigin.y / tRayDirection.y;
+                    double t = intersectPlane(tRayOrigin, tRayDirection);
+                    if (t != 0.0) {
                         intersections[numIntersections] = t;
                         xsObjects[numIntersections] = j;
                         numIntersections++;
                     }
                 } else if (objType == 1) { // SPHERE
-                    // this is a vector from the origin of the ray to the center of the
-                    // sphere at 0,0,0
-                    double4 vecToCenter = tRayOrigin - originPoint;
 
-                    // This dot product is always 1.0 if tRayDirection is normalized. Which it isn't.
-                    double a = dot(tRayDirection, tRayDirection);
-
-                    // Take the dot of the direction and the vector from ray origin to
-                    // sphere center times 2
-                    double b = 2.0 * dot(tRayDirection, vecToCenter);
-
-                    // Take the dot of the two sphereToRay vectors and decrease by 1 (is
-                    // that because the sphere is unit length 1?
-                    double c = dot(vecToCenter, vecToCenter) - 1.0;
-
-                    // calculate the discriminant
-                    double discriminant = (b * b) - 4 * a * c;
-                    if (discriminant > 0.0) {
-                        // finally, find the intersection distances on our ray.
-                        double t1 = (-b - sqrt(discriminant)) / (2 * a);
-                        // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
-                        // when we do refraction
+                    // finally, find the intersection distances on our ray.
+                    double t1 = intersectSphere(tRayOrigin, tRayDirection);
+                    // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
+                    // when we do refraction
+                    if (t1 != 0.0) {
                         intersections[numIntersections] = t1;
                         xsObjects[numIntersections] = j;
                         numIntersections++;
                     }
                 } else if (objType == 2) { // CYLINDER
-                                           // Cylinder intersection
-                    double rdx2 = tRayDirection.x * tRayDirection.x;
-                    double rdz2 = tRayDirection.z * tRayDirection.z;
-
-                    double a = rdx2 + rdz2;
-                    if (fabs(a) < 0.0001) {
-                        // c.intercectCaps(ray, xs)
-                        continue;
-                    }
-
-                    double b = 2 * tRayOrigin.x * tRayDirection.x + 2 * tRayOrigin.z * tRayDirection.z;
-
-                    double rox2 = tRayOrigin.x * tRayOrigin.x;
-                    double roz2 = tRayOrigin.z * tRayOrigin.z;
-
-                    double c1 = rox2 + roz2 - 1;
-
-                    double disc = b * b - 4 * a * c1;
-
-                    // ray does not intersect the cylinder
-                    if (disc < 0.0) {
-                        continue;
-                    }
-
-                    double t0 = (-b - sqrt(disc)) / (2 * a);
-                    double t1 = (-b + sqrt(disc)) / (2 * a);
-
-                    double y0 = tRayOrigin.y + t0 * tRayDirection.y;
-
-                    if (y0 > objects[j].minY && y0 < objects[j].maxY) {
-                        // add intersection
-                        intersections[numIntersections] = t0;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
-                    }
-
-                    double y1 = tRayOrigin.y + t1 * tRayDirection.y;
-                    if (y1 > objects[j].minY && y1 < objects[j].maxY) {
-                        // add intersection
-                        intersections[numIntersections] = t1;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
-                    }
-
-                    // TODO fix caps
-                    double2 caps = intersectCaps(tRayOrigin, tRayDirection, objects[j].minY, objects[j].maxY);
-                    if (caps.x > 0.0) {
-                        intersections[numIntersections] = caps.x;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
-                    }
-                    if (caps.y > 0.0) {
-                        intersections[numIntersections] = caps.y;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
+                    double4 out = intersectCylinder(tRayOrigin, tRayDirection, objects[j]);
+                    for (unsigned int a = 0; a < 4; a++) {
+                        if (out[a] != 0) {
+                            intersections[numIntersections] = out[a];
+                            xsObjects[numIntersections] = j;
+                            numIntersections++;
+                        }
                     }
                 } else if (objType == 3) { // BOX
-                    // There is supposed to be a way to optimize this for fewer checks by looking at early values.
-                    double2 xt = checkAxis(tRayOrigin.x, tRayDirection.x, -1.0, 1.0);
-                    double2 yt = checkAxis(tRayOrigin.y, tRayDirection.y, -1.0, 1.0);
-                    double2 zt = checkAxis(tRayOrigin.z, tRayDirection.z, -1.0, 1.0);
-
-                    // Om det största av min-värdena är större än det minsta max-värdet.
-                    double tmin = maxX(xt.x, yt.x, zt.x);
-                    double tmax = minX(xt.y, yt.y, zt.y);
-                    if (tmin > tmax) {
-                        // No intersection
-                        continue;
-                    }
+                    double2 out = intersectCube(tRayOrigin, tRayDirection);
 
                     // assign intersections
-                    intersections[numIntersections] = tmin;
-                    xsObjects[numIntersections] = j;
-                    numIntersections++;
+                    if (out.x != 0.0) {
+                        intersections[numIntersections] = out.x;
+                        xsObjects[numIntersections] = j;
+                        numIntersections++;
+                    }
+                    if (out.y != 0.0) {
+                        intersections[numIntersections] = out.y;
+                        xsObjects[numIntersections] = j;
+                        numIntersections++;
+                    }
 
-                    intersections[numIntersections] = tmax;
-                    xsObjects[numIntersections] = j;
-                    numIntersections++;
                 } else if (objType == 4) { // GROUPS
 
                     // Group with triangles experiment
@@ -692,7 +641,7 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                         for (int childIndex = 0; childIndex < objects[j].childCount; childIndex++) {
                             // START PSUEDO-RECURSIVE CODE
                             // 1) Create an empty stack. (move to top later)
-                            int stack[200] = {0};
+                            int stack[64] = {0};
 
                             // Stack index, i.e. current "depth" of stack
                             int currentSIndex = 0;
@@ -899,14 +848,12 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                 // Calculate the cosine of the OUTGOING ray in relation to the surface
                 // normal.
                 double cosine = dot(rayDirection, normalVec);
-                double inCosine = dot(eyeVector, normalVec);
                 // Finish this iteration by storing the bounce.
                 if (obj.type == 4) {
-                //printf("triangle color: %f %f %f\n", normalVec.x, normalVec.y, normalVec.z);
-                    bounce bnce = {position, cosine, inCosine, xsTriangleColor[normalIndex], xsTriangleEmission[normalIndex], normalVec};
+                    bounce bnce = {position, cosine, xsTriangleColor[normalIndex], xsTriangleEmission[normalIndex], normalVec};
                     bounces[b] = bnce;
                 } else {
-                    bounce bnce = {position, cosine, inCosine, obj.color, obj.emission, normalVec};
+                    bounce bnce = {position, cosine, obj.color, obj.emission, normalVec};
                     bounces[b] = bnce;
                 }
 
@@ -965,7 +912,11 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
               double4 lightVec = normalize(lightPosition - bounces[x].point);
               double lightDotNormal = dot(lightVec, bounces[x].normal);
               if (lightDotNormal > 0.0) {
-                accumColor += effectiveColor * lightDotNormal *  mask; // * (1/(1 + tMin*tMin));
+                // experiment with fake sphere light attenuation from http://www.cemyuksel.com/research/pointlightattenuation/
+                 double r = 0.283; // fake for now...
+                 double attenuation = 2 / (tMin*tMin + r*r + tMin * sqrt(tMin*tMin + r*r));
+
+                accumColor += effectiveColor * lightDotNormal *  mask * (1/tMin*tMin);
               }
 
                //accumColor += bounces[x].color * objects[0].emission * (lightSourceCos  * tMin  * PI * 4);
@@ -977,7 +928,7 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
             // perform cosine-weighted importance sampling by multiplying the mask
             // with the cosine
             mask *= bounces[x].cos;
-            //break;
+           // break;
 
 //            // Start by dealing with diffuse surfaces.
 //            // First, ADD current accumulated color with the hadamard of the current
