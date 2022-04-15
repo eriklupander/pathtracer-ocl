@@ -80,12 +80,14 @@ func ModelScene() func() *Scene {
 
 		// lightsource
 		lightsource := shapes.NewSphere()
-		lightsource.SetTransform(geom.Translate(0, 1.36, 0))
+		lightsource.SetTransform(geom.Translate(0, .399, 0))
+		lightsource.SetTransform(geom.Scale(0.283, 0.01, 0.283))
+
 		light := material.NewLightBulb()
-		light.Emission = geom.NewColor(9, 8, 6)
+		light.Emission = geom.NewColor(1, 1, 1)
 		lightsource.SetMaterial(light)
 
-		shapes := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, group, lightsource}
+		shapes := []shapes.Shape{lightsource, floor, ceil, leftWall, rightWall, backWall, group}
 
 		return &Scene{
 			Camera:  cam,

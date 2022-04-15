@@ -44,7 +44,7 @@ func NewMirror() Material {
 }
 func NewLightBulb() Material {
 	return Material{
-		Color:           geom.Tuple4{0, 0, 0},
+		Color:           geom.Tuple4{1, 1, 1},
 		Emission:        geom.Tuple4{8, 8, 8},
 		RefractiveIndex: 1.0,
 	}
