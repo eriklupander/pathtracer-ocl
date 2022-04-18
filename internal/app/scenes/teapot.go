@@ -15,7 +15,10 @@ import (
 func ModelScene() func() *Scene {
 	return func() *Scene {
 
-		cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
+		//cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
+		cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.1, -1.5), geom.NewPoint(0, 0.05, 0))
+		//cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0.01, .05, 0.01), geom.NewPoint(0,0,0))
+
 		cam.FocalLength = cmd.Cfg.FocalLength
 		cam.Aperture = cmd.Cfg.Aperture
 		// left wall
@@ -54,8 +57,8 @@ func ModelScene() func() *Scene {
 
 		// left sphere
 		leftSphere := shapes.NewSphere()
-		leftSphere.SetTransform(geom.Translate(-0.35, -0.3, 0.15))
-		leftSphere.SetTransform(geom.Scale(0.1, 0.1, 0.1))
+		leftSphere.SetTransform(geom.Translate(-0.35, -0.28, -0.15))
+		leftSphere.SetTransform(geom.Scale(0.12, 0.12, 0.12))
 		leftSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
 
 		// cylinder
@@ -90,10 +93,10 @@ func ModelScene() func() *Scene {
 		obj.ComputeVertexNormals(tris)
 
 		group.Bounds()
-		group.SetTransform(geom.Translate(0, -0.4, 0.1))
+		group.SetTransform(geom.Translate(0, -0.4, 0))
 		group.SetTransform(geom.Scale(0.07, 0.07, 0.07))
 		silver := material.NewDiffuse(0.75, 0.75, 0.75)
-		//silver.Reflectivity = 0.2
+		silver.Reflectivity = 0.2
 		group.SetMaterial(silver)
 		shapes.Divide(group, 50)
 		group.Bounds()
@@ -109,7 +112,7 @@ func ModelScene() func() *Scene {
 		light.Emission = geom.NewColor(1, 1, 1)
 		lightsource.SetMaterial(light)
 
-		shapes := []shapes.Shape{lightsource, floor, ceil, leftWall, rightWall, backWall, group}
+		shapes := []shapes.Shape{lightsource, floor, ceil, leftWall, rightWall, backWall, group, leftSphere}
 
 		return &Scene{
 			Camera:  cam,

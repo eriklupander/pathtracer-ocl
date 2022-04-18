@@ -50,12 +50,12 @@ typedef struct __attribute__((packed)) tag_object {
     char padding5[212];        // 196 bytes                    // 1024
 } object;
 
-typedef struct tag_intersection {
+typedef struct tag_intersection_old {
     unsigned int objectIndex;
     double t;
     double4 color;      // while color and emission can be read from the "object" referenced by objectIndex,
     double4 emission;   // 3D models organized into BVH trees needs to get their material from the intersected group of the tree.
-} intersection;
+} intersection_old;
 
 typedef struct tag_bounce {
     double4 point;
@@ -79,6 +79,21 @@ typedef struct __attribute__((packed)) tag_triangle {
     double4 color;        // 32 bytes (288 bytes)
     char	padding[224]; // 224 bytes
 } triangle;               // 512 total
+
+// used as an internal data structure
+typedef struct tag_context {
+    double intersections[64]; // = {0};   // t of an intersection (MOVE TO LOCAL)
+    unsigned int xsObjects[64]; // = {0}; // index maps to each xs above, value to objects
+    double4 xsTriangle[64]; // = {0};
+    double4 xsTriangleColor[64]; // = {0};
+    double4 xsTriangleEmission[64]; // = {0};
+} context;
+
+typedef struct intersection_tag {
+    double t;
+    int lowestIntersectionIndex;
+    int normalIndex;
+} intersection;
 
 inline int round2(double number) {
    int sign = (int)((number > 0) - (number < 0));
@@ -187,6 +202,24 @@ inline double2 intersectCaps(double4 origin, double4 direction, double minY, dou
 inline static float noise3D(float x, float y, float z) {
     float ptr = 0.0f;
     return fract(sin(x * 112.9898f + y * 179.233f + z * 237.212f) * 43758.5453f, &ptr);
+}
+
+// from https://math.stackexchange.com/questions/1585975/how-to-generate-random-points-on-a-sphere
+inline double4 randomPointOnSphere(double r, double u1, double u2) {
+    //latitude: 𝜆=arccos(2𝑢1−1)−𝜋2 OR arcsin(2𝑎−1)
+    //longitude:𝜙=2𝜋𝑢2
+    double lat = acos(2*u1 - 1) - PI*2; // asin(2*u1-1);
+    double lon = 2*PI*u2;
+
+    // 𝑥=cos𝜆cos𝜙
+    // 𝑦=cos𝜆sin𝜙
+    // 𝑧=sin𝜆
+    double4 out = (double4)(0.0, 0.0, 0.0, 1.0);
+    out.x = cos(lat) * cos(lon) * r;
+    out.y = (sin(lat) - PI*0.25)  * r;
+    out.z = cos(lat) * sin(lon) * r;
+
+    return out;
 }
 
 // randomVectorInHemisphere is based on
@@ -332,12 +365,16 @@ inline double intersectPlane(double4 tRayOrigin, double4 tRayDirection) {
     return 0.0;
 }
 
-inline bool intersectShadowRay(double4 rayOrigin, double4 rayDirection, __global object *objects, __global group *groups, __global triangle *triangles, unsigned int numObjects, unsigned int doNotIntersect, double minT) {
-    double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
+// findClosestIntersection returns the closest intersection. NOTE! It possible we could optimize this for shadow rays,
+// if we pass some kind of maxT - if t < maxT we could exit early. (Note: If so - its a good idea to have groups with
+// triangles last...) (Using this common func instead of the dedicated shadow checker meant 15-22 seconds...)
+inline intersection findClosestIntersection(__global object *objects, unsigned int numObjects, __global group *groups, __global triangle *triangles, double4 rayOrigin, double4 rayDirection, context *ctx) {
+    // ----------------------------------------------------------
+    // Loop through scene objects in order to find intersections
+    // ----------------------------------------------------------
+    unsigned int numIntersections = 0;
     for (unsigned int j = 0; j < numObjects; j++) {
-        if (j == doNotIntersect) {
-            continue;
-        }
+
         long objType = objects[j].type;
         //  translate our ray into object space by multiplying ray pos and dir
         //  with inverse object matrix
@@ -345,33 +382,48 @@ inline bool intersectShadowRay(double4 rayOrigin, double4 rayDirection, __global
         double4 tRayDirection = mul(objects[j].inverse, rayDirection);
 
         // Intersection code
-        if (objType == 0) { // PLANE
+        if (objType == 0) { // PLANE - intersect transformed ray with plane
             double t = intersectPlane(tRayOrigin, tRayDirection);
-            if (t > 0 && t <= minT - 0.1) {
-                return true;
+            if (t != 0.0) {
+                ctx->intersections[numIntersections] = t;
+                ctx->xsObjects[numIntersections] = j;
+                numIntersections++;
             }
         } else if (objType == 1) { // SPHERE
 
+            // finally, find the intersection distances on our ray.
             double t1 = intersectSphere(tRayOrigin, tRayDirection);
-            if (t1 > 0.0 && t1 < minT) {
-                return true;
+            // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
+            // when we do refraction
+            if (t1 != 0.0) {
+                ctx->intersections[numIntersections] = t1;
+                ctx->xsObjects[numIntersections] = j;
+                numIntersections++;
             }
         } else if (objType == 2) { // CYLINDER
             double4 out = intersectCylinder(tRayOrigin, tRayDirection, objects[j]);
-            for (unsigned int a = 0; a < 3; a++) {
-                if (out[a] > 0.0 && out[a] < minT) {
-                    return true;
+            for (unsigned int a = 0; a < 4; a++) {
+                if (out[a] != 0) {
+                    ctx->intersections[numIntersections] = out[a];
+                    ctx->xsObjects[numIntersections] = j;
+                    numIntersections++;
                 }
             }
-
         } else if (objType == 3) { // BOX
             double2 out = intersectCube(tRayOrigin, tRayDirection);
-            if (out.x > 0.0 && out.x < minT) {
-                return true;
+
+            // assign intersections
+            if (out.x != 0.0) {
+                ctx->intersections[numIntersections] = out.x;
+                ctx->xsObjects[numIntersections] = j;
+                numIntersections++;
             }
-            if (out.y > 0.0 && out.y < minT) {
-                return true;
+            if (out.y != 0.0) {
+                ctx->intersections[numIntersections] = out.y;
+                ctx->xsObjects[numIntersections] = j;
+                numIntersections++;
             }
+
         } else if (objType == 4) { // GROUPS
 
             // Group with triangles experiment
@@ -436,10 +488,19 @@ inline bool intersectShadowRay(double4 rayOrigin, double4 rayDirection, __global
                                     continue;
                                 }
                                 double t = f * dot(triangles[n].e2, originCrossE1);
-                                if (t > 0 && t < minT) {
-                                    //printf("shadow ray intersected triangle at t=%f with minT=%f\n", t, minT);
-                                    return true;
-                                }
+                                ctx->intersections[numIntersections] = t;
+                                ctx->xsObjects[numIntersections] = j;
+
+                                // assume we have vertex normals. If not, assume N in n1,n2,n3
+                                // stored the computed normal in a list using the same indexing as xsObjects so
+                                // if a ray intersects several triangles in the group, we'll get an intersection per triangle
+                                // but can separate their normals and then only use the one for the nearest intersection
+                                ctx->xsTriangle[numIntersections] = triangles[n].n2 * u + triangles[n].n3 * v + triangles[n].n1 * (1.0 - u - v);
+
+                                // experiment: record the color and emission of the intersection
+                                ctx->xsTriangleColor[numIntersections] = triangles[n].color;
+                                ctx->xsTriangleEmission[numIntersections] = (double4){0,0,0,0}; //triangles[n].emission;
+                                numIntersections++;
                             }
 
                             // Push the current node index to the Stack, i.e. add at current index and then increment the stack depth.
@@ -487,7 +548,26 @@ inline bool intersectShadowRay(double4 rayOrigin, double4 rayDirection, __global
             }
         }
     }
-    return false;
+
+    if  (numIntersections == 0) {
+        return (intersection){0.0, -1, -1};
+    }
+
+    // find lowest positive intersection index
+    double lowestIntersectionT = 1024.0;
+    int lowestIntersectionIndex = -1;
+    int normalIndex = -1;
+    for (unsigned int x = 0; x < numIntersections; x++) {
+        if (ctx->intersections[x] > 0.0001) {
+            if (ctx->intersections[x] < lowestIntersectionT) {
+                lowestIntersectionT = ctx->intersections[x];
+                lowestIntersectionIndex = ctx->xsObjects[x];
+                normalIndex = x; // while only used for triangles, we track computed normal by x.
+            }
+        }
+    }
+    intersection ixs = {lowestIntersectionT, lowestIntersectionIndex, normalIndex};
+    return ixs;
 }
 
 inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, float rndY, int sample, int totalSamples) {
@@ -543,6 +623,9 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
     unsigned int x = i % cam->width;
     unsigned int y = yOffset + i / cam->width;
 
+    double totZ = 0.0;
+    int sampledZ = 0;
+
     for (unsigned int n = 0; n < samples; n++) {
         // For each sample, compute a new ray cast through the target (x,y) pixel with random offset within the pixel.
         ray r = rayForPixel(x, y, *cam, noise3D(fgi, n, fgi2), noise3D(fgi, fgi2, n), n, samples);
@@ -554,212 +637,16 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
         bounce bounces[16] = {};
         for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
 
-            // track up to 16 intersections per ray.
-            double intersections[64] = {0};   // t of an intersection
-            unsigned int xsObjects[64] = {0}; // index maps to each xs above, value to objects
-            double4 xsTriangle[64] = {0};
-            double4 xsTriangleColor[64] = {0};
-            double4 xsTriangleEmission[64] = {0};
-            // ----------------------------------------------------------
-            // Loop through scene objects in order to find intersections
-            // ----------------------------------------------------------
-            unsigned int numIntersections = 0;
-            for (unsigned int j = 0; j < numObjects; j++) {
+            context ctx = {{0},{0},{0},{0},{0}};
+            intersection ixs = findClosestIntersection(objects, numObjects, groups, triangles, rayOrigin, rayDirection, &ctx);
 
-                long objType = objects[j].type;
-                //  translate our ray into object space by multiplying ray pos and dir
-                //  with inverse object matrix
-                double4 tRayOrigin = mul(objects[j].inverse, rayOrigin);
-                double4 tRayDirection = mul(objects[j].inverse, rayDirection);
+            if (ixs.lowestIntersectionIndex > -1) {
+                object obj = objects[ixs.lowestIntersectionIndex];
 
-                // Intersection code
-                if (objType == 0) { // PLANE - intersect transformed ray with plane
-                    double t = intersectPlane(tRayOrigin, tRayDirection);
-                    if (t != 0.0) {
-                        intersections[numIntersections] = t;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
-                    }
-                } else if (objType == 1) { // SPHERE
-
-                    // finally, find the intersection distances on our ray.
-                    double t1 = intersectSphere(tRayOrigin, tRayDirection);
-                    // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
-                    // when we do refraction
-                    if (t1 != 0.0) {
-                        intersections[numIntersections] = t1;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
-                    }
-                } else if (objType == 2) { // CYLINDER
-                    double4 out = intersectCylinder(tRayOrigin, tRayDirection, objects[j]);
-                    for (unsigned int a = 0; a < 4; a++) {
-                        if (out[a] != 0) {
-                            intersections[numIntersections] = out[a];
-                            xsObjects[numIntersections] = j;
-                            numIntersections++;
-                        }
-                    }
-                } else if (objType == 3) { // BOX
-                    double2 out = intersectCube(tRayOrigin, tRayDirection);
-
-                    // assign intersections
-                    if (out.x != 0.0) {
-                        intersections[numIntersections] = out.x;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
-                    }
-                    if (out.y != 0.0) {
-                        intersections[numIntersections] = out.y;
-                        xsObjects[numIntersections] = j;
-                        numIntersections++;
-                    }
-
-                } else if (objType == 4) { // GROUPS
-
-                    // Group with triangles experiment
-                    // Groups MUST have their bounds computed. Start by checking if ray intersects bounds.
-                    // Remember: At this point in the code, the group's transform has already modified the ray.
-                    // However, the cube intersection is based on transform/rotate/scale to unit cube. Our BB does not
-                    // really work that way...
-                    // Note!! BB must have extent in all 3-axises. I.e two triangles forming a wall facing the Z axis will have 0
-                    // depth which breaks the intersect code. (typically, use this for models that's rarely flat, or fake something if 0.)
-                    // Using this BB only reduces teapot with 8 samples from 3m29.753546781s to 31.606680099s.
-                    // Further, adding the BB check for each node in the tree further reduces the time taken to 4.037422895s
-                    if (!intersectRayWithBox(tRayOrigin, tRayDirection, objects[j].bbMin, objects[j].bbMax)) {
-                        // skipped++;
-                        continue;
-                    }
-                    // hit++;
-
-                    // If the "object" BB was intersected, we take a look at the "object's" groupOffset. If > -1, we
-                    // need to set up a local stack to traverse the group hierarchy
-                    if (objects[j].childCount > 0) {
-
-                        // this is somewhat ugly, but since a "parent" obj (from objects) may have up to 64 children
-                        // (references to indexes in "groups"), we must use a for-statement here.
-                        for (int childIndex = 0; childIndex < objects[j].childCount; childIndex++) {
-                            // START PSUEDO-RECURSIVE CODE
-                            // 1) Create an empty stack. (move to top later)
-                            int stack[64] = {0};
-
-                            // Stack index, i.e. current "depth" of stack
-                            int currentSIndex = 0;
-
-                            // Tree index, i.e. which "node index" we're currently processing
-                            int currentNodeIndex = objects[j].children[childIndex];
-
-                            // Initialize current node as root. Note the ugly code to get a pointer to the current node...
-                            group root = groups[currentNodeIndex];
-                            group *current = &root;
-
-                            for (; current != 0 || currentSIndex > -1;) {
-                                for (; current != 0 && intersectRayWithBox(tRayOrigin, tRayDirection, current->bbMin, current->bbMax);) {
-
-                                    // Iterate over all triangles and record triangle/ray intersections...
-                                    for (int n = current->triOffset; n < current->triOffset + current->triCount; n++) {
-
-                                        double4 dirCrossE2 = cross(tRayDirection, triangles[n].e2);
-                                        double determinant = dot(triangles[n].e1, dirCrossE2);
-                                        if (fabs(determinant) < 0.0001) {
-                                            continue;
-                                        }
-
-                                        // Triangle misses over P1-P3 edge
-                                        double f = 1.0 / determinant;
-                                        double4 p1ToOrigin = tRayOrigin - triangles[n].p1;
-                                        double u = f * dot(p1ToOrigin, dirCrossE2);
-                                        if (u < 0 || u > 1) {
-                                            continue;
-                                        }
-
-                                        double4 originCrossE1 = cross(p1ToOrigin, triangles[n].e1);
-                                        double v = f * dot(tRayDirection, originCrossE1);
-                                        if (v < 0 || (u + v) > 1) {
-                                            continue;
-                                        }
-                                        double t = f * dot(triangles[n].e2, originCrossE1);
-                                        intersections[numIntersections] = t;
-                                        xsObjects[numIntersections] = j;
-
-                                        // assume we have vertex normals. If not, assume N in n1,n2,n3
-                                        // stored the computed normal in a list using the same indexing as xsObjects so
-                                        // if a ray intersects several triangles in the group, we'll get an intersection per triangle
-                                        // but can separate their normals and then only use the one for the nearest intersection
-                                        xsTriangle[numIntersections] = triangles[n].n2 * u + triangles[n].n3 * v + triangles[n].n1 * (1.0 - u - v);
-
-                                        // experiment: record the color and emission of the intersection
-                                        xsTriangleColor[numIntersections] = triangles[n].color;
-                                        xsTriangleEmission[numIntersections] = (double4){0,0,0,0}; //triangles[n].emission;
-                                        numIntersections++;
-                                    }
-
-                                    // Push the current node index to the Stack, i.e. add at current index and then increment the stack depth.
-                                    stack[currentSIndex] = currentNodeIndex;
-                                    currentSIndex++;
-
-                                    // if the left child is populated (i.e. > -1), update currentNodeIndex with left child and
-                                    // update the pointer to the current node
-                                    if (current->children[0] > 0) {
-                                        currentNodeIndex = current->children[0];
-                                        root = groups[current->children[0]];
-                                        current = &root;
-                                    } else {
-                                        // If no left child, mark current as nil, so we can exit the inner for.
-                                        current = 0;
-                                    }
-                                } // exit of inner for loop, i.e. carry on to the right side
-
-                                // We pop our stack by decrementing (remember, the last iteration above resulting an increment, but no push. (Fix?)
-                                currentSIndex--;
-                                if (currentSIndex == -1) {
-                                    goto done;
-                                }
-
-                                // get the popped item by fetching the node index from the current stack index.
-                                root = groups[stack[currentSIndex]];
-                                current = &root;
-
-                                // we're done with the left subtree, check if there's a right-hand node.
-                                if (current->children[1] > 0) {
-                                    // if there's a right-hand node, update the node index and the current node.
-                                    currentNodeIndex = current->children[1];
-                                    root = groups[current->children[1]];
-                                    current = &root;
-                                } else {
-                                    // if no right-hand side, set current to nil. In a binary tree, we should
-                                    // always get a right side if we got a left side...
-                                    current = 0;
-                                }
-                            }
-                            // END PSUEDO-RECURSIVE CODE
-                        done:
-                            current = 0;
-                        }
-                    }
-                }
-            }
-
-            // find lowest positive intersection index
-            double lowestIntersectionT = 1024.0;
-            int lowestIntersectionIndex = -1;
-            int normalIndex = -1;
-            for (unsigned int x = 0; x < numIntersections; x++) {
-                if (intersections[x] > 0.0001) {
-                    if (intersections[x] < lowestIntersectionT) {
-                        lowestIntersectionT = intersections[x];
-                        lowestIntersectionIndex = xsObjects[x];
-                        normalIndex = x; // while only used for triangles, we track computed normal by x.
-                    }
-                }
-            }
-
-            if (lowestIntersectionIndex > -1) {
-                object obj = objects[lowestIntersectionIndex];
                 // Remember that we use the untransformed ray here!
 
                 // Position gives us the intersection position along RAY at T
-                double4 position = rayOrigin + rayDirection * lowestIntersectionT;
+                double4 position = rayOrigin + rayDirection * ixs.t;
 
                 // The vector to the eye (or last bounce origin) is exactly the opposite
                 // of the ray direction
@@ -806,7 +693,7 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                     }
                 } else if (obj.type == 4) {
                     // GROUP, which in practice means a triangle, whose normal is typically pre-populated in N and stored in xsTriangles
-                    objectNormal = xsTriangle[normalIndex];
+                    objectNormal = ctx.xsTriangle[ixs.normalIndex];
                     // printf("object normal: %f %f %f\n", objectNormal.x, objectNormal.y, objectNormal.z);
                 }
                 // Finish the normal vector by multiplying it back into world coord
@@ -850,7 +737,7 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                 double cosine = dot(rayDirection, normalVec);
                 // Finish this iteration by storing the bounce.
                 if (obj.type == 4) {
-                    bounce bnce = {position, cosine, xsTriangleColor[normalIndex], xsTriangleEmission[normalIndex], normalVec};
+                    bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec};
                     bounces[b] = bnce;
                 } else {
                     bounce bnce = {position, cosine, obj.color, obj.emission, normalVec};
@@ -890,21 +777,33 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
             // sixth run - sample the (point) light source on each bounce
 
             // If sampling a light source directly, ignore further bounces and set accColor to emission.
-            if (x == 0 && bounces[x].emission.x > 0.0) {
-                accumColor = accumColor + mask * bounces[x].emission;
+            if (bounces[x].emission.x > 0.0) {
+                // sample light source if first bounce.
+                if (x == 0) {
+                    accumColor = accumColor + mask * bounces[x].emission;
+                }
                 break;
             }
+            sampledZ++;
+            double4 lightOriginPosition = (double4)(0.0, .395, 0.0, 0.0); // note .w will be == 1 after next line
+            double4 lightScale = (0.283, 0.01, 0.283, 1.0);
+            double4 lightPosition = lightOriginPosition + randomPointOnSphere(1.0, noise3D(fgi, n+x, fgi2), noise3D(fgi, fgi2, n+x)) * lightScale;
+            // NOTE: It should be possible to scale the x,y,z coords from random func by object's actual scale.
+            // I.e. y values will be "clamped" close to 0.
 
-            double4 lightPosition = (double4)(0.0, .395, 0.0, 1.0);
+            totZ += lightPosition.z;
+            //printf("x: %f y:%f z: %f\n", lightPosition.x, lightPosition.y, lightPosition.z);
             double4 shadowRayDirection = lightPosition - bounces[x].point;
             double4 shadowRayOrigin = bounces[x].point + (shadowRayDirection*0.00001); // take a slight overpos
-
 
             double tMin = sqrt(shadowRayDirection.x*shadowRayDirection.x + shadowRayDirection.y*shadowRayDirection.y + shadowRayDirection.z*shadowRayDirection.z);
 
             // now, we need to check if the shadowRay intersects any scene object EXCEPT our light source...
-            bool shadowed = intersectShadowRay(shadowRayOrigin, shadowRayDirection, objects, groups, triangles, numObjects, 0, tMin);
-            if (shadowed) {
+            context ctx = {{0},{0},{0},{0},{0}};
+            intersection ixs = findClosestIntersection(objects, numObjects, groups, triangles, shadowRayOrigin, shadowRayDirection, &ctx);
+
+//            bool shadowed = intersectShadowRay(shadowRayOrigin, shadowRayDirection, objects, groups, triangles, numObjects, 0, tMin);
+            if (ixs.lowestIntersectionIndex != -1 && ixs.lowestIntersectionIndex != 0) {
                 // accumulate nothing, e.g. black
             } else {
               double4 color = bounces[x].color;
@@ -913,8 +812,8 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
               double lightDotNormal = dot(lightVec, bounces[x].normal);
               if (lightDotNormal > 0.0) {
                 // experiment with fake sphere light attenuation from http://www.cemyuksel.com/research/pointlightattenuation/
-                 double r = 0.283; // fake for now...
-                 double attenuation = 2 / (tMin*tMin + r*r + tMin * sqrt(tMin*tMin + r*r));
+                 //double r = 0.283; // fake for now...
+                 //double attenuation = 2 / (tMin*tMin + r*r + tMin * sqrt(tMin*tMin + r*r));
 
                 accumColor += effectiveColor * lightDotNormal *  mask * (1/tMin*tMin);
               }
@@ -990,4 +889,5 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
     output[i * 4 + 3] = 1.0;
 
     // printf("%d rays missing the BB, %d hits\n", skipped, hit);
+    //printf("total z: %f\n", totZ/sampledZ);
 }
