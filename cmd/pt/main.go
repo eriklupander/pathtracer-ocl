@@ -48,6 +48,8 @@ func main() {
 
 	var scene func() *scenes.Scene
 	switch cmd.Cfg.Scene {
+	case "reference":
+		scene = scenes.ReferenceScene()
 	case "teapot":
 		scene = scenes.ModelScene()
 	case "gopher":
