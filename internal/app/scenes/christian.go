@@ -12,7 +12,7 @@ import (
 	"math"
 )
 
-func ModelScene() func() *Scene {
+func ChristianScene() func() *Scene {
 	return func() *Scene {
 
 		//cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
@@ -59,8 +59,8 @@ func ModelScene() func() *Scene {
 		leftSphere := shapes.NewSphere()
 		leftSphere.SetTransform(geom.Translate(-0.35, -0.28, -0.15))
 		leftSphere.SetTransform(geom.Scale(0.12, 0.12, 0.12))
-		leftSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
-
+		leftSphere.SetMaterial(material.NewDiffuse(0.9, 0.9, 0.9))
+		leftSphere.Material.Reflectivity = 0.99
 		// cylinder
 		cyl := shapes.NewCylinderMMC(0, 0.4, true)
 		cyl.SetTransform(geom.Translate(0.45, -0.5, 0.2))
@@ -104,18 +104,66 @@ func ModelScene() func() *Scene {
 		fmt.Printf("distance from camera to teapot: %f", geom.Magnitude(geom.Sub(geom.NewPoint(0, -0.4, 0.1), geom.NewPoint(0, 0.13, -0.9))))
 
 		// lightsource
+
+		lightMtl := material.NewLightBulb()
+		lightMtl.Emission = geom.NewColor(90,80,60)
+
 		lightsource := shapes.NewSphere()
-		lightsource.SetTransform(geom.Translate(0, .4, 0))
-		lightsource.SetTransform(geom.Scale(0.3, 0.03, 0.3))
+		lightsource.SetTransform(geom.Translate(0, .3, 0))
+		lightsource.SetTransform(geom.Scale(0.03, 0.03, 0.03))
+		lightsource.SetMaterial(lightMtl)
 
-		light := material.NewLightBulb()
-		//light.Emission = geom.NewColor(2.25, 2, 1.5)
-		//light.Emission = geom.NewColor(4.5, 4, 3)
-		light.Emission = geom.NewColor(9,8,6)
-		//light.Emission = geom.NewColor(10.8, 9.6, 7.2)
-		lightsource.SetMaterial(light)
+		lightsource1 := shapes.NewSphere()
+		lightsource1.SetTransform(geom.Translate(-0.5, .3, 0))
+		lightsource1.SetTransform(geom.Scale(0.03, 0.03, 0.03))
+		lightsource1.SetMaterial(lightMtl)
 
-		shapes := []shapes.Shape{lightsource, floor, ceil, leftWall, rightWall, backWall, group, leftSphere}
+		lightsource2 := shapes.NewSphere()
+		lightsource2.SetTransform(geom.Translate(-0.3, .3, 0))
+		lightsource2.SetTransform(geom.Scale(0.03, 0.03, 0.03))
+		lightsource2.SetMaterial(lightMtl)
+
+		coverMtl := material.NewDiffuse(0.8, 0.8, 0.8)
+		coverMtl.Reflectivity = 0.95
+		cover2 := shapes.NewCylinderMMC(0, 1, false)
+		cover2.SetTransform(geom.Translate(-0.3, .295, 0))
+		cover2.SetTransform(geom.Scale(0.06, 0.4, 0.06))
+		cover2.SetMaterial(coverMtl)
+
+		lightsource3 := shapes.NewSphere()
+		lightsource3.SetTransform(geom.Translate(-0.1, .3, 0))
+		lightsource3.SetTransform(geom.Scale(0.03, 0.03, 0.03))
+		lightsource3.SetMaterial(lightMtl)
+		cover3 := shapes.NewCylinderMMC(0, 1, false)
+		cover3.SetTransform(geom.Translate(-0.1, .295, 0))
+		cover3.SetTransform(geom.Scale(0.06, 0.4, 0.06))
+		cover3.SetMaterial(coverMtl)
+
+		lightsource4 := shapes.NewSphere()
+		lightsource4.SetTransform(geom.Translate(0.1, .3, 0))
+		lightsource4.SetTransform(geom.Scale(0.03, 0.03, 0.03))
+		lightsource4.SetMaterial(lightMtl)
+		cover4 := shapes.NewCylinderMMC(0, 1, false)
+		cover4.SetTransform(geom.Translate(0.1, .295, 0))
+		cover4.SetTransform(geom.Scale(0.06, 0.4, 0.06))
+		cover4.SetMaterial(coverMtl)
+
+		lightsource5 := shapes.NewSphere()
+		lightsource5.SetTransform(geom.Translate(0.3, .3, 0))
+		lightsource5.SetTransform(geom.Scale(0.03, 0.03, 0.03))
+		lightsource5.SetMaterial(lightMtl)
+		cover5 := shapes.NewCylinderMMC(0, 1, false)
+		cover5.SetTransform(geom.Translate(0.3, .295, 0))
+		cover5.SetTransform(geom.Scale(0.06, 0.4, 0.06))
+		cover5.SetMaterial(coverMtl)
+
+		lightsource6 := shapes.NewSphere()
+		lightsource6.SetTransform(geom.Translate(0.5, .3, 0))
+		lightsource6.SetTransform(geom.Scale(0.03, 0.03, 0.03))
+		lightsource6.SetMaterial(lightMtl)
+
+		shapes := []shapes.Shape{ lightsource2, lightsource3, lightsource4, lightsource5, cover2, cover3, cover4, cover5,
+			floor, ceil, leftWall, rightWall, backWall, group, leftSphere}
 
 		return &Scene{
 			Camera:  cam,

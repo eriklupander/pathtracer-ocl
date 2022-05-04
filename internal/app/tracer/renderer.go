@@ -2,7 +2,11 @@ package tracer
 
 import (
 	"github.com/eriklupander/pathtracer-ocl/cmd"
+	"github.com/eriklupander/pathtracer-ocl/internal/app/raw"
+	"github.com/sirupsen/logrus"
+	"io/ioutil"
 	"math/rand"
+	"os"
 	"time"
 
 	camera2 "github.com/eriklupander/pathtracer-ocl/internal/app/camera"
@@ -55,6 +59,12 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 	result := ocl.Trace(sceneObjects, triangles, groups, cmd.Cfg.DeviceIndex, height, ctx.samples, clCamera)
 
 	// result now contains RGBA values for each pixel,
+	// write .raw file
+	rawData := raw.WriteRawImage(result, width, height)
+	if err := ioutil.WriteFile("experiment.raw", rawData, os.FileMode(0755)); err != nil {
+		logrus.WithError(err).Error("error writing .raw file to disk")
+	}
+
 	j := 0
 	for i := 0; i < len(result); i += 4 {
 		x := j % width

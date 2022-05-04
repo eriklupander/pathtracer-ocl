@@ -56,6 +56,8 @@ func main() {
 		scene = scenes.GopherScene()
 	case "gopher-window":
 		scene = scenes.GopherWindowScene()
+	case "christian":
+		scene = scenes.ChristianScene()
 	default:
 		scene = scenes.OCLScene()
 	}
