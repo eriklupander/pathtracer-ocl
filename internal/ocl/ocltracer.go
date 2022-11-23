@@ -2,6 +2,7 @@ package ocl
 
 import (
 	_ "embed"
+	"image"
 	"math/rand"
 	"time"
 	"unsafe"
@@ -33,7 +34,9 @@ type CLObject struct {
 	BBMax            [4]float64  // 32 bytes == 504 + 64 == 568
 	ChildCount       int32       // 4 bytes                 572
 	Children         [64]int32   // 64x4 == 256             828
-	Padding5         [212]byte
+	IsTextured       bool        // 1 byte
+	TextureIndex     uint8       // 1 byte
+	Padding5         [210]byte
 }
 
 type CLGroup struct {
@@ -83,10 +86,12 @@ type CLCamera struct {
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceIndex, height, samples int, camera CLCamera) []float64 {
+func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceIndex, height, samples int, camera CLCamera, textures []image.Image) []float64 {
 	numPixels := int(camera.Width * camera.Height)
 	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
 
+	// This is a weird fix for when the scene contains no model-related triangles, but we need to transmit something
+	// over to OpenCL...
 	if len(triangles) == 0 {
 		triangles = append(triangles, CLTriangle{
 			P1: [4]float64{},
@@ -158,6 +163,29 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 		logrus.Fatalf("CreateKernel failed: %+v", err)
 	}
 
+	// Prepare textures
+	var memObj *cl.MemObject
+	if len(textures) > 0 {
+		format := cl.ImageFormat{ChannelOrder: cl.ChannelOrderRGBA, ChannelDataType: cl.ChannelDataTypeUNormInt8}
+		desc := cl.ImageDescription{
+			Type:       cl.MemObjectTypeImage2DArray,
+			Width:      textures[0].Bounds().Dx(),
+			Height:     textures[0].Bounds().Dy(),
+			RowPitch:   textures[0].(*image.NRGBA).Stride,
+			SlicePitch: len(textures[0].(*image.NRGBA).Pix),
+			ArraySize:  len(textures),
+		}
+		allImages := make([]byte, 0)
+		for _, v := range textures {
+			allImages = append(allImages, v.(*image.NRGBA).Pix...)
+		}
+		memObj, err = context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, format, desc, allImages)
+		if err != nil {
+			logrus.Fatalf("error creating textures: %v", err)
+		}
+		defer memObj.Release()
+	}
+
 	// 4. Some kind of error-check where we make sure the parameters passed are supported?
 	for i := 0; i < 4; i++ {
 		_, err := kernel.ArgName(i)
@@ -188,20 +216,20 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	// split work into batches in order to avoid kernels running for more than 10 seconds
 	// otherwise, the GPU driver will kill us.
 	results := make([]float64, 0)
-	batchSize := 8
+	batchSize := 4
 	if batchSize > numPixels {
 		batchSize = numPixels
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize)...)
+		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize, memObj)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results
 }
 
-func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int) []float64 {
+func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int, texturesMemObj *cl.MemObject) []float64 {
 	pixelsInBatch := rowsPerBatch * int(camera.Width)
 
 	// populate seed of random numbers, OpenCL can't do random by itself AFAIK
@@ -246,6 +274,15 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, 
 	}
 	defer cameraBuffer.Release()
 
+	//imgFormat := cl.ImageFormat{
+	//	ChannelOrder:    cl.ChannelOrderRGBA,
+	//	ChannelDataType: cl.ChannelDataTypeFloat,
+	//}
+	//imageMemObject, err := context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, imgFormat, cl.ImageDescription{Width: 2048, Height: 2048, Type: cl.MemObjectTypeImage2D}, textures[int32(1)])
+	if err != nil {
+		logrus.Fatalf("error creating image: %v", err)
+	}
+
 	// 5.2 create OpenCL buffer (memory) for the output data, we want RGBA per ray, i.e. 4 float64 per ray.
 	// So, we'll need 32 bytes to store the final computed color for each ray. Remember, we pass 1 ray per pixel.
 	output, err := context.CreateEmptyBuffer(cl.MemReadOnly, pixelsInBatch*32)
@@ -287,8 +324,11 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, 
 		logrus.Fatalf("EnqueueWriteBuffer for camera failed: %+v", err)
 	}
 
+	// Texture experiment
+	//queue.EnqueueWriteImage(memObj, true, []int{0}, []int{0}, 0, 0, )
+
 	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
-	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, groupsBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset)); err != nil {
+	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, groupsBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset), texturesMemObj); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 

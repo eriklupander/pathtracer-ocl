@@ -9,6 +9,8 @@ type Material struct {
 	Emission        geom.Tuple4
 	RefractiveIndex float64
 	Reflectivity    float64
+	Textured        bool
+	TextureID       uint8
 }
 
 func NewDefaultMaterial() Material {

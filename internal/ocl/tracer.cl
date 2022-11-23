@@ -48,7 +48,9 @@ typedef struct __attribute__((packed)) tag_object {
     double4 bbMax;             // 32 bytes                     // 576
     int childCount;            // 4 bytes. Used for groups to know which "group" that's the root group.
     int children[64];          // 256 bytes
-    char padding5[212];        // 196 bytes                    // 1024
+    bool isTextured;           // 1 byte
+    unsigned char textureIndex;// 1 byte
+    char padding5[210];        // 194 bytes                    // 1024
 } object;
 
 typedef struct tag_intersection_old {
@@ -367,7 +369,7 @@ inline double intersectPlane(double4 tRayOrigin, double4 tRayDirection) {
 
 // findClosestIntersection returns the closest intersection. NOTE! It possible we could optimize this for shadow rays,
 // if we pass some kind of maxT - if
-inline intersection findClosestIntersection(__global object *objects, unsigned int numObjects, __global group *groups, __global triangle *triangles, double4 rayOrigin, double4 rayDirection, context *ctx) {
+inline intersection findClosestIntersection(__local object *objects, unsigned int numObjects, __global group *groups, __global triangle *triangles, double4 rayOrigin, double4 rayDirection, context *ctx) {
     // ----------------------------------------------------------
     // Loop through scene objects in order to find intersections
     // ----------------------------------------------------------
@@ -774,37 +776,53 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
     return r;
 }
 
+// the sampler is used to "pick" colors from textures using normalized (e.g. floating point) coordinates where
+// CLK_ADDRESS_REPEAT makes sure that we don't get "mirrored" textures when crossing the 1.0 or 0.0 boundaries.
+__constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_LINEAR;
 
-__kernel void trace(__global object *objects, const unsigned int numObjects, __global triangle *triangles, __global group *groups, __global double *output,
-                    __global double *seedX, const unsigned int samples, __global camera *cam, const unsigned int yOffset) {
+__kernel void trace(__constant object *global_objects, unsigned int numObjects, __global triangle *triangles, __global group *groups, __global double *output,
+                    __constant double *seedX, unsigned int samples, __global camera *cam, unsigned int yOffset,
+                    image2d_array_t image) {
 
     // int skipped = 0;
     // int hit = 0;
     double colorWeight = 1.0 / samples;
     int i = get_global_id(0);
-    float fgi = seedX[i] / numObjects;
-    float fgi2 = seedX[i] / samples;
+    __local float fgi, fgi2;
+    fgi = seedX[i] / numObjects;
+    fgi2 = seedX[i] / samples;
     double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
     double4 colors = (double4)(0, 0, 0, 0);
+
+
+
+    // experiment: copy objects to local memory. May actually be faster, at least on CPU?
+    __local object objects[16];
+    for (unsigned int a = 0;a < numObjects;a++) {
+        objects[a] = global_objects[a];
+    }
+
+    __local intersection ixs;
 
     // get current x,y coordinate from i given image width
     unsigned int x = i % cam->width;
     unsigned int y = yOffset + i / cam->width;
 
+    __local double4 rayOrigin, rayDirection;
     for (unsigned int n = 0; n < samples; n++) {
         // For each sample, compute a new ray cast through the target (x,y) pixel with random offset within the pixel.
         ray r = rayForPixel(x, y, *cam, noise3D(fgi, n, fgi2), noise3D(fgi, fgi2, n), n, samples);
-        double4 rayOrigin = r.origin;
-        double4 rayDirection = r.direction;
+        rayOrigin = r.origin;
+        rayDirection = r.direction;
 
         unsigned int actualBounces = 0;
         // Each ray may bounce up to 5 times
-        bounce bounces[16] = {};
+        __local bounce bounces[16]; // = {};
 
         for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
 
             context ctx = {{0},{0},{0},{0},{0}};
-            intersection ixs = findClosestIntersection(objects, numObjects, groups, triangles, rayOrigin, rayDirection, &ctx);
+            ixs = findClosestIntersection(objects, numObjects, groups, triangles, rayOrigin, rayDirection, &ctx);
 
             if (ixs.lowestIntersectionIndex > -1) {
                 object obj = objects[ixs.lowestIntersectionIndex];
@@ -906,7 +924,15 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
                     bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec};
                     bounces[b] = bnce;
                 } else {
-                    bounce bnce = {position, cosine, obj.color, obj.emission, normalVec};
+                    // texture experiment for PLANE
+                    double4 color = obj.color;
+                    if (obj.isTextured) {
+                          double4 localPoint = mul(obj.inverse, position);
+                          float4 rgba = read_imagef(image, sampler, (float4)(localPoint.x, localPoint.z, obj.textureIndex, 0));
+                          color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                    }
+
+                    bounce bnce = {position, cosine, color, obj.emission, normalVec};
                     bounces[b] = bnce;
                 }
 
@@ -952,9 +978,9 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
             }
 
             // HERE - iterate over all light sources in the scene, accumulate light from all.
-            for (int l = 0; l < numObjects;l++) {
+            for (unsigned int l = 0; l < numObjects;l++) {
                 if (objects[l].emission.x > 0.0) {
-                     double4 lightOriginPosition = (double4)(objects[l].transform[3], objects[l].transform[7], objects[l].transform[11], 0.0); // note .w will be == 1 after next line
+                    double4 lightOriginPosition = (double4)(objects[l].transform[3], objects[l].transform[7], objects[l].transform[11], 0.0); // note .w will be == 1 after next line
                     double scaleBy = max(max(objects[l].transform[0], objects[l].transform[5]), objects[l].transform[10]);
                     double4 lightScale = (double4)(scaleBy, scaleBy, scaleBy, 1.0);
                     double4 rpos = randomPointOnSphere(1.0, noise3D(fgi, n+x*l, fgi2), noise3D(fgi, fgi2, n+x*x*l));
@@ -1004,7 +1030,7 @@ __kernel void trace(__global object *objects, const unsigned int numObjects, __g
     }
 
     // Finish the pixel by multiplying each RGB component by its total fraction and
-    // store in the output bufer.
+    // store in the output buffer.
     output[i * 4] = colors.x * colorWeight;
     output[i * 4 + 1] = colors.y * colorWeight;
     output[i * 4 + 2] = colors.z * colorWeight;
