@@ -44,13 +44,16 @@ typedef struct __attribute__((packed)) tag_object {
     double minY;               // 8 bytes. Used for cylinders.
     double maxY;               // 8 bytes. Used for cylinders.
     double reflectivity;       // 8 bytes
+    double textureScaleX;
+    double textureScaleY;
     double4 bbMin;             // 32 bytes
     double4 bbMax;             // 32 bytes                     // 576
     int childCount;            // 4 bytes. Used for groups to know which "group" that's the root group.
     int children[64];          // 256 bytes
     bool isTextured;           // 1 byte
     unsigned char textureIndex;// 1 byte
-    char padding5[210];        // 194 bytes                    // 1024
+
+    char padding5[194];        // 194 bytes                    // 1024
 } object;
 
 typedef struct tag_intersection_old {
@@ -928,7 +931,7 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                     double4 color = obj.color;
                     if (obj.isTextured) {
                           double4 localPoint = mul(obj.inverse, position);
-                          float4 rgba = read_imagef(image, sampler, (float4)(localPoint.x, localPoint.z, obj.textureIndex, 0));
+                          float4 rgba = read_imagef(image, sampler, (float4)(localPoint.x * obj.textureScaleX, localPoint.z * obj.textureScaleY, obj.textureIndex, 0));
                           color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
                     }
 

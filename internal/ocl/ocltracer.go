@@ -2,6 +2,7 @@ package ocl
 
 import (
 	_ "embed"
+	"fmt"
 	"image"
 	"math/rand"
 	"time"
@@ -30,13 +31,16 @@ type CLObject struct {
 	MinY             float64     // 8 bytes
 	MaxY             float64     // 8 bytes
 	Reflectivity     float64     // 8 bytes
-	BBMin            [4]float64  // 32 bytes
-	BBMax            [4]float64  // 32 bytes == 504 + 64 == 568
-	ChildCount       int32       // 4 bytes                 572
-	Children         [64]int32   // 64x4 == 256             828
-	IsTextured       bool        // 1 byte
-	TextureIndex     uint8       // 1 byte
-	Padding5         [210]byte
+	TextureScaleX    float64
+	TextureScaleY    float64
+	BBMin            [4]float64 // 32 bytes
+	BBMax            [4]float64 // 32 bytes == 504 + 64 == 568
+	ChildCount       int32      // 4 bytes                 572
+	Children         [64]int32  // 64x4 == 256             828
+	IsTextured       bool       // 1 byte
+	TextureIndex     uint8      // 1 byte
+
+	Padding5 [194]byte
 }
 
 type CLGroup struct {
@@ -164,6 +168,10 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	}
 
 	// Prepare textures
+	for i := 0; i < len(objects); i++ {
+
+		fmt.Printf("%d\n", unsafe.Sizeof(objects[i]))
+	}
 	var memObj *cl.MemObject
 	if len(textures) > 0 {
 		format := cl.ImageFormat{ChannelOrder: cl.ChannelOrderRGBA, ChannelDataType: cl.ChannelDataTypeUNormInt8}

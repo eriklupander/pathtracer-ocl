@@ -32,6 +32,8 @@ func ReferenceScene() func() *Scene {
 		leftWall.SetMaterial(material.NewDiffuse(0.75, 0.25, 0.25))
 		leftWall.Material.Textured = true
 		leftWall.Material.TextureID = 0
+		leftWall.Material.TextureScaleX = 1.0
+		leftWall.Material.TextureScaleY = 1.0
 		//
 		//// right wall
 		rightWall := shapes.NewPlane()
@@ -41,6 +43,8 @@ func ReferenceScene() func() *Scene {
 		rightWall.SetMaterial(material.NewDiffuse(0.25, 0.25, 0.75))
 		rightWall.Material.Textured = true
 		rightWall.Material.TextureID = 0
+		rightWall.Material.TextureScaleX = 1.0
+		rightWall.Material.TextureScaleY = 1.0
 
 		// floor
 		floor := shapes.NewPlane()
@@ -48,6 +52,8 @@ func ReferenceScene() func() *Scene {
 		floorMaterial := material.NewDiffuse(0.9, 0.8, 0.7)
 		floorMaterial.Textured = true
 		floorMaterial.TextureID = 1
+		floorMaterial.TextureScaleX = 0.25
+		floorMaterial.TextureScaleY = 0.25
 		floor.SetMaterial(floorMaterial)
 
 		// ceiling
@@ -56,6 +62,8 @@ func ReferenceScene() func() *Scene {
 		ceil.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
 		ceil.Material.Textured = true
 		ceil.Material.TextureID = 2
+		ceil.Material.TextureScaleX = 1.0
+		ceil.Material.TextureScaleY = 1.0
 
 		// back wall
 		backWall := shapes.NewPlane()
@@ -64,6 +72,8 @@ func ReferenceScene() func() *Scene {
 		backWall.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
 		backWall.Material.Textured = true
 		backWall.Material.TextureID = 0
+		backWall.Material.TextureScaleX = 1.0
+		backWall.Material.TextureScaleY = 1.0
 
 		// front wall
 		frontWall := shapes.NewPlane()

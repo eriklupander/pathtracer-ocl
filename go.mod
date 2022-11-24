@@ -1,6 +1,6 @@
 module github.com/eriklupander/pathtracer-ocl
 
-go 1.17
+go 1.19
 
 require (
 	github.com/jgillich/go-opencl v0.0.0-20180608191952-a0efba3e5257

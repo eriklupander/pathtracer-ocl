@@ -111,7 +111,7 @@ func ModelScene() func() *Scene {
 		light := material.NewLightBulb()
 		//light.Emission = geom.NewColor(2.25, 2, 1.5)
 		//light.Emission = geom.NewColor(4.5, 4, 3)
-		light.Emission = geom.NewColor(9,8,6)
+		light.Emission = geom.NewColor(9, 8, 6)
 		//light.Emission = geom.NewColor(10.8, 9.6, 7.2)
 		lightsource.SetMaterial(light)
 

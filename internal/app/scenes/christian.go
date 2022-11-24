@@ -106,7 +106,7 @@ func ChristianScene() func() *Scene {
 		// lightsource
 
 		lightMtl := material.NewLightBulb()
-		lightMtl.Emission = geom.NewColor(90,80,60)
+		lightMtl.Emission = geom.NewColor(90, 80, 60)
 
 		lightsource := shapes.NewSphere()
 		lightsource.SetTransform(geom.Translate(0, .3, 0))
@@ -162,7 +162,7 @@ func ChristianScene() func() *Scene {
 		lightsource6.SetTransform(geom.Scale(0.03, 0.03, 0.03))
 		lightsource6.SetMaterial(lightMtl)
 
-		shapes := []shapes.Shape{ lightsource2, lightsource3, lightsource4, lightsource5, cover2, cover3, cover4, cover5,
+		shapes := []shapes.Shape{lightsource2, lightsource3, lightsource4, lightsource5, cover2, cover3, cover4, cover5,
 			floor, ceil, leftWall, rightWall, backWall, group, leftSphere}
 
 		return &Scene{

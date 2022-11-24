@@ -11,6 +11,8 @@ type Material struct {
 	Reflectivity    float64
 	Textured        bool
 	TextureID       uint8
+	TextureScaleX   float64
+	TextureScaleY   float64
 }
 
 func NewDefaultMaterial() Material {
