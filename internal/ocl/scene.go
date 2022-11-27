@@ -23,11 +23,18 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		obj.Emission = in[i].GetMaterial().Emission
 		obj.RefractiveIndex = in[i].GetMaterial().RefractiveIndex
 		obj.Children = initToMinus1()
-		obj.IsTextured = in[i].GetMaterial().Textured
-		if obj.IsTextured {
+
+		if in[i].GetMaterial().Textured {
+			obj.IsTextured = true
 			obj.TextureIndex = in[i].GetMaterial().TextureID
 			obj.TextureScaleX = in[i].GetMaterial().TextureScaleX
 			obj.TextureScaleY = in[i].GetMaterial().TextureScaleY
+		}
+		if in[i].GetMaterial().TexturedNM {
+			obj.IsTexturedNM = true
+			obj.TextureIndexNM = in[i].GetMaterial().TextureIDNM
+			obj.TextureScaleXNM = in[i].GetMaterial().TextureScaleXNM
+			obj.TextureScaleYNM = in[i].GetMaterial().TextureScaleYNM
 		}
 
 		switch in[i].(type) {
@@ -66,7 +73,7 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		obj.Reflectivity = in[i].GetMaterial().Reflectivity
 
 		// finally, pad!
-		obj.Padding5 = [194]byte{}
+		obj.Padding5 = [176]byte{}
 
 		objs = append(objs, obj)
 	}

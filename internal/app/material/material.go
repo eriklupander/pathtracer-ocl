@@ -13,6 +13,10 @@ type Material struct {
 	TextureID       uint8
 	TextureScaleX   float64
 	TextureScaleY   float64
+	TexturedNM      bool
+	TextureIDNM     uint8
+	TextureScaleXNM float64
+	TextureScaleYNM float64
 }
 
 func NewDefaultMaterial() Material {

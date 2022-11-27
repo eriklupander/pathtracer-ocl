@@ -46,14 +46,18 @@ typedef struct __attribute__((packed)) tag_object {
     double reflectivity;       // 8 bytes
     double textureScaleX;
     double textureScaleY;
+    double textureScaleXNM;
+    double textureScaleYNM;
     double4 bbMin;             // 32 bytes
     double4 bbMax;             // 32 bytes                     // 576
     int childCount;            // 4 bytes. Used for groups to know which "group" that's the root group.
     int children[64];          // 256 bytes
     bool isTextured;           // 1 byte
     unsigned char textureIndex;// 1 byte
+    bool isTexturedNM;           // 1 byte
+    unsigned char textureIndexNM;// 1 byte
 
-    char padding5[194];        // 194 bytes                    // 1024
+    char padding5[176];        // 194 bytes                    // 1024
 } object;
 
 typedef struct tag_intersection_old {
@@ -99,6 +103,46 @@ typedef struct intersection_tag {
     int lowestIntersectionIndex;
     int normalIndex;
 } intersection;
+
+
+inline double2 sphericalMap(double4 p) {
+
+	// compute the azimuthal angle
+	// -π < theta <= π
+	// angle increases clockwise as viewed from above,
+	// which is opposite of what we want, but we'll fix it later.
+	double theta = atan2(p.x, p.z);
+
+	// vec is the vector pointing from the sphere's origin (the world origin)
+	// to the point, which will also happen to be exactly equal to the sphere's
+	// radius.
+	double4 vec = (double4)(p.x, p.y, p.z, 0.0);
+	double radius = length(vec);
+
+	// compute the polar angle
+	// 0 <= phi <= π
+	double phi = acos(p.y / radius);
+
+	// -0.5 < raw_u <= 0.5
+	double rawU = theta / (2.0 * PI);
+
+	// 0 <= u < 1
+	// here's also where we fix the direction of u. Subtract it from 1,
+	// so that it increases counterclockwise as viewed from above.
+	double u = 1 - (rawU + 0.5);
+
+	// we want v to be 0 at the south pole of the sphere,
+	// and 1 at the north pole, so we have to "flip it over"
+	// by subtracting it from 1.
+	double v = 1 - phi/PI;
+
+    double2 res;
+    res.x = u;
+    res.y = v;
+	return res;
+}
+
+
 
 inline int round2(double number) {
    int sign = (int)((number > 0) - (number < 0));
@@ -785,7 +829,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT |
 
 __kernel void trace(__constant object *global_objects, unsigned int numObjects, __global triangle *triangles, __global group *groups, __global double *output,
                     __constant double *seedX, unsigned int samples, __global camera *cam, unsigned int yOffset,
-                    image2d_array_t image) {
+                    image2d_array_t image, image2d_array_t sphereTextures) {
 
     // int skipped = 0;
     // int hit = 0;
@@ -841,12 +885,18 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
 
                 // object normal at intersection: Transform point from world to object
                 // space
-
                 double4 objectNormal;
 
-                // PLANE always have its normal UP in local space
+                // PLANE always have its normal UP in local space (unless we have a normal map)
                 if (obj.type == 0) {
-                    objectNormal = (double4)(0.0, 1.0, 0.0, 0.0);
+                    if (obj.isTexturedNM) {
+                        double4 localPoint = mul(obj.inverse, position);
+                        float4 rgba = read_imagef(image, sampler, (float4)(fabs(localPoint.x) * obj.textureScaleXNM, fabs(localPoint.z) * obj.textureScaleYNM, obj.textureIndexNM, 0));
+                        objectNormal = (double4)(rgba.x, rgba.y, rgba.z, 0.0);
+                        objectNormal = normalize(objectNormal);
+                    } else {
+                        objectNormal = (double4)(0.0, 1.0, 0.0, 0.0);
+                    }
                 } else if (obj.type == 1) {
                     // SPHERE always has its normal from sphere center outwards to the
                     // world position.
@@ -930,9 +980,17 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                     // texture experiment for PLANE
                     double4 color = obj.color;
                     if (obj.isTextured) {
-                          double4 localPoint = mul(obj.inverse, position);
-                          float4 rgba = read_imagef(image, sampler, (float4)(localPoint.x * obj.textureScaleX, localPoint.z * obj.textureScaleY, obj.textureIndex, 0));
-                          color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                          if (obj.type == 0) {
+                              double4 localPoint = mul(obj.inverse, position);
+                              float4 rgba = read_imagef(image, sampler, (float4)(localPoint.x * obj.textureScaleX, localPoint.z * obj.textureScaleY, obj.textureIndex, 0));
+                              color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                          }
+                          if (obj.type == 1) {
+                                double4 localPoint = mul(obj.inverse, position);
+                                double2 uv = sphericalMap(localPoint);
+                                float4 rgba = read_imagef(sphereTextures, sampler, (float4)(uv.x, 1.0-uv.y, obj.textureIndex, 0));
+                                color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                          }
                     }
 
                     bounce bnce = {position, cosine, color, obj.emission, normalVec};

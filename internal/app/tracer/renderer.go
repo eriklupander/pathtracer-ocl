@@ -56,7 +56,7 @@ func (ctx *Ctx) renderPixelPathTracer(width, height int) {
 	}
 
 	// Render the scene
-	result := ocl.Trace(sceneObjects, triangles, groups, cmd.Cfg.DeviceIndex, height, ctx.samples, clCamera, ctx.scene.Textures)
+	result := ocl.Trace(sceneObjects, triangles, groups, cmd.Cfg.DeviceIndex, height, ctx.samples, clCamera, ctx.scene.Textures, ctx.scene.SphereTextures)
 
 	// result now contains RGBA values for each pixel,
 	// write .raw file
