@@ -174,50 +174,36 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	}
 
 	// Prepare textures
-	var memObj *cl.MemObject
-	if len(textures) > 0 {
-		format := cl.ImageFormat{ChannelOrder: cl.ChannelOrderRGBA, ChannelDataType: cl.ChannelDataTypeUNormInt8}
-		desc := cl.ImageDescription{
-			Type:       cl.MemObjectTypeImage2DArray,
-			Width:      textures[0].Bounds().Dx(),
-			Height:     textures[0].Bounds().Dy(),
-			RowPitch:   textures[0].(*image.NRGBA).Stride,
-			SlicePitch: len(textures[0].(*image.NRGBA).Pix),
-			ArraySize:  len(textures),
-		}
-		allImages := make([]byte, 0)
-		for _, v := range textures {
-			allImages = append(allImages, v.(*image.NRGBA).Pix...)
-		}
-		memObj, err = context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, format, desc, allImages)
-		if err != nil {
-			logrus.Fatalf("error creating textures: %v", err)
-		}
-		defer memObj.Release()
-	}
+	texturesArrayMemObj := prepareTextures(context, textures)
+	defer texturesArrayMemObj.Release()
+	sphereTexturesArrayMemObj := prepareTextures(context, sphereTextures)
+	defer sphereTexturesArrayMemObj.Release()
 
-	// Prepare textures
-	var sphereTexturesMemObj *cl.MemObject
-	if len(sphereTextures) > 0 {
-		format := cl.ImageFormat{ChannelOrder: cl.ChannelOrderRGBA, ChannelDataType: cl.ChannelDataTypeUNormInt8}
-		desc := cl.ImageDescription{
-			Type:       cl.MemObjectTypeImage2DArray,
-			Width:      sphereTextures[0].Bounds().Dx(),
-			Height:     sphereTextures[0].Bounds().Dy(),
-			RowPitch:   sphereTextures[0].(*image.NRGBA).Stride,
-			SlicePitch: len(sphereTextures[0].(*image.NRGBA).Pix),
-			ArraySize:  len(sphereTextures),
-		}
-		allImages := make([]byte, 0)
-		for _, v := range sphereTextures {
-			allImages = append(allImages, v.(*image.NRGBA).Pix...)
-		}
-		sphereTexturesMemObj, err = context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, format, desc, allImages)
-		if err != nil {
-			logrus.Fatalf("error creating sphereTextures: %v", err)
-		}
-		defer sphereTexturesMemObj.Release()
-	}
+	//// Prepare sphere textures
+	//var sphereTexturesMemObj *cl.MemObject
+	//if len(sphereTextures) > 0 {
+	//	format := cl.ImageFormat{ChannelOrder: cl.ChannelOrderRGBA, ChannelDataType: cl.ChannelDataTypeUNormInt8}
+	//	desc := cl.ImageDescription{
+	//		Type:       cl.MemObjectTypeImage2DArray,
+	//		Width:      sphereTextures[0].Bounds().Dx(),
+	//		Height:     sphereTextures[0].Bounds().Dy(),
+	//		RowPitch:   sphereTextures[0].(*image.NRGBA).Stride,
+	//		SlicePitch: len(sphereTextures[0].(*image.NRGBA).Pix),
+	//		ArraySize:  len(sphereTextures),
+	//	}
+	//	allImages := make([]byte, 0)
+	//	for _, v := range sphereTextures {
+	//		allImages = append(allImages, v.(*image.NRGBA).Pix...)
+	//	}
+	//	sphereTexturesMemObj, err = context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, format, desc, allImages)
+	//	if err != nil {
+	//		logrus.Fatalf("error creating sphereTextures: %v", err)
+	//	}
+	//	defer sphereTexturesMemObj.Release()
+	//} else {
+	//	fakeImage := image.NewNRGBA(image.Rect(0, 0, 1024, 1024))
+	//	sphereTexturesMemObj, _ = context.CreateImageFromImage(cl.MemReadOnly|cl.MemCopyHostPtr, fakeImage)
+	//}
 
 	// 4. Some kind of error-check where we make sure the parameters passed are supported?
 	for i := 0; i < 4; i++ {
@@ -255,11 +241,39 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize, memObj, sphereTexturesMemObj)...)
+		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize, texturesArrayMemObj, sphereTexturesArrayMemObj)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
 	return results
+}
+
+func prepareTextures(context *cl.Context, textures []image.Image) *cl.MemObject {
+	var memObj *cl.MemObject
+	if len(textures) > 0 {
+		format := cl.ImageFormat{ChannelOrder: cl.ChannelOrderRGBA, ChannelDataType: cl.ChannelDataTypeUNormInt8}
+		desc := cl.ImageDescription{
+			Type:       cl.MemObjectTypeImage2DArray,
+			Width:      textures[0].Bounds().Dx(),
+			Height:     textures[0].Bounds().Dy(),
+			RowPitch:   textures[0].(*image.NRGBA).Stride,
+			SlicePitch: len(textures[0].(*image.NRGBA).Pix),
+			ArraySize:  len(textures),
+		}
+		allImages := make([]byte, 0)
+		for _, v := range textures {
+			allImages = append(allImages, v.(*image.NRGBA).Pix...)
+		}
+		memObj, err := context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, format, desc, allImages)
+		if err != nil {
+			logrus.Fatalf("error creating textures: %v", err)
+		}
+		return memObj
+	} else {
+		fakeImage := image.NewNRGBA(image.Rect(0, 0, 1024, 1024))
+		memObj, _ = context.CreateImageFromImage(cl.MemReadOnly|cl.MemCopyHostPtr, fakeImage)
+	}
+	return memObj
 }
 
 func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int, texturesMemObj *cl.MemObject, sphereTexturesMemObj *cl.MemObject) []float64 {
@@ -351,7 +365,7 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, 
 	// Texture experiment
 	//queue.EnqueueWriteImage(memObj, true, []int{0}, []int{0}, 0, 0, )
 
-	// 5.4 Kernel is our program and here we explicitly bind our 4 parameters to it
+	// 5.4 Kernel is our program and here we explicitly bind our parameters to it
 	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, groupsBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset), texturesMemObj, sphereTexturesMemObj); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}

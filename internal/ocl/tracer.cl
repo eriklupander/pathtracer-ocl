@@ -381,7 +381,7 @@ inline double4 intersectCylinder(double4 tRayOrigin, double4 tRayDirection, obje
     return out;
 }
 
-inline double intersectSphere(double4 tRayOrigin, double4 tRayDirection) {
+inline double2 intersectSphere(double4 tRayOrigin, double4 tRayDirection) {
     // this is a vector from the origin of the ray to the center of the
     // sphere at 0,0,0
     double4 vecToCenter = tRayOrigin - ((double4)(0.0, 0.0, 0.0, 1.0));
@@ -402,9 +402,13 @@ inline double intersectSphere(double4 tRayOrigin, double4 tRayDirection) {
     if (discriminant > 0.0) {
         // finally, find the intersection distances on our ray.
         double t1 = (-b - sqrt(discriminant)) / (2 * a);
-        return t1;
+        double t2 = (-b + sqrt(discriminant)) / (2*a);
+        double2 t;
+        t.x = t1;
+        t.y = t2;
+        return t;
     }
-    return 0.0;
+    return (double2)(0.0, 0.0);
 }
 
 inline double intersectPlane(double4 tRayOrigin, double4 tRayDirection) {
@@ -440,11 +444,16 @@ inline intersection findClosestIntersection(__local object *objects, unsigned in
         } else if (objType == 1) { // SPHERE
 
             // finally, find the intersection distances on our ray.
-            double t1 = intersectSphere(tRayOrigin, tRayDirection);
-            // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
-            // when we do refraction
-            if (t1 != 0.0) {
-                ctx->intersections[numIntersections] = t1;
+            double2 t = intersectSphere(tRayOrigin, tRayDirection);
+             // required for refraction and possibly to detect when the camera starts inside a sphere
+
+            if (t.x != 0.0) {
+                ctx->intersections[numIntersections] = t.x;
+                ctx->xsObjects[numIntersections] = j;
+                numIntersections++;
+            }
+            if (t.y != 0.0) {
+                ctx->intersections[numIntersections] = t.y;
                 ctx->xsObjects[numIntersections] = j;
                 numIntersections++;
             }
@@ -646,10 +655,13 @@ inline bool findFirstIntersectionCloserThan(__global object *objects, unsigned i
         } else if (objType == 1) { // SPHERE
 
             // finally, find the intersection distances on our ray.
-            double t1 = intersectSphere(tRayOrigin, tRayDirection);
+            double2 t = intersectSphere(tRayOrigin, tRayDirection);
             // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
             // when we do refraction
-            if (t1 > 0.0 && t1 < minT) {
+            if (t.x > 0.0 && t.x < minT) {
+                return true;
+            }
+            if (t.y > 0.0 && t.y < minT) {
                 return true;
             }
         } else if (objType == 2) { // CYLINDER
@@ -898,6 +910,7 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                         objectNormal = (double4)(0.0, 1.0, 0.0, 0.0);
                     }
                 } else if (obj.type == 1) {
+
                     // SPHERE always has its normal from sphere center outwards to the
                     // world position.
                     double4 localPoint = mul(obj.inverse, position);
@@ -977,7 +990,7 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                     bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec};
                     bounces[b] = bnce;
                 } else {
-                    // texture experiment for PLANE
+                    // texture experiment for PLANE and SPHERE
                     double4 color = obj.color;
                     if (obj.isTextured) {
                           if (obj.type == 0) {
@@ -991,6 +1004,10 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                                 float4 rgba = read_imagef(sphereTextures, sampler, (float4)(uv.x, 1.0-uv.y, obj.textureIndex, 0));
                                 color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
                           }
+                    }
+
+                    if (obj.type == 1 && obj.emission.x == 0.0) {
+                       // printf("check color for sphere...\n");
                     }
 
                     bounce bnce = {position, cosine, color, obj.emission, normalVec};
@@ -1031,9 +1048,9 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
 
             // If sampling a light source directly, ignore further bounces and set accColor to emission.
             if (bounces[x].emission.x > 0.0) {
-                // sample light source if first bounce.
+                // sample light source "as is" if first bounce.
                 if (x == 0) {
-                    accumColor = accumColor + mask * bounces[x].emission;
+                    accumColor = bounces[x].color; // accumColor + mask * bounces[x].emission;
                 }
                 break;
             }
@@ -1067,6 +1084,8 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                             //double attenuation = 2*PI*objects[0].transform[0]*objects[0].transform[0] / ((0.25+ixs.t)*(0.25+ixs.t));
 
                             // Christian's attenuation based on % of hemisphere which is covered by light source.
+                            // Note 8 months later: I can't figure out why I'm using that value from the object's transform...
+                            // ..it may be a trick to not accidently divide by zero? But what if x is == 0 and t is 0????
                             double attenuation = 1 - ixs.t / sqrt(ixs.t*ixs.t + objects[l].transform[0]*objects[l].transform[0]);
 
                             // Compute and accumulate color

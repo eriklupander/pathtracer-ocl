@@ -58,6 +58,10 @@ func main() {
 		scene = scenes.GopherWindowScene()
 	case "christian":
 		scene = scenes.ChristianScene()
+	case "textures":
+		scene = scenes.TexturedPlanetsScene()
+	case "envmap":
+		scene = scenes.EnvironmentMap()
 	default:
 		scene = scenes.OCLScene()
 	}
