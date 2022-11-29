@@ -9,7 +9,7 @@ import (
 	"math"
 )
 
-func ReferenceScene() func() *Scene {
+func ReflectionsScene() func() *Scene {
 	return func() *Scene {
 
 		//cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
@@ -56,7 +56,7 @@ func ReferenceScene() func() *Scene {
 		leftSphere := shapes.NewSphere()
 		leftSphere.SetTransform(geom.Translate(-0.35, -0.28, -0.15))
 		leftSphere.SetTransform(geom.Scale(0.12, 0.12, 0.12))
-		leftSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
+		leftSphere.SetMaterial(material.NewMirror())
 
 		// middle sphere
 		rightSphere := shapes.NewSphere()

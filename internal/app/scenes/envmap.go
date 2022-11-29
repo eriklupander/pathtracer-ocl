@@ -38,7 +38,8 @@ func EnvironmentMap() func() *Scene {
 		rightSphere := shapes.NewSphere()
 		rightSphere.SetTransform(geom.Translate(0, -0.14, -0.30))
 		rightSphere.SetTransform(geom.Scale(0.16, 0.16, 0.16))
-		rightSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
+		rightSphere.SetMaterial(material.NewMirror()) //0.9, 0.8, 0.7))
+		//rightSphere.Material.Reflectivity = 0.95
 
 		// lightsource
 		lightsource := shapes.NewSphere()
@@ -52,13 +53,13 @@ func EnvironmentMap() func() *Scene {
 		// IMPORTANT! The decoded image gets much darker than original
 		envTexture := LoadImage("./assets/alps_field_8k.png")
 		skySphere := shapes.NewSphere()
-		skySphere.SetTransform(geom.Scale(50, 50, 50))
+		skySphere.SetTransform(geom.Scale(5, 5, 5))
 		skySphere.Material = material.NewDefaultMaterial()
 		skySphere.Material.Textured = true
 		skySphere.Material.TextureID = 0
 		skySphere.Material.TextureScaleX = 1.0
 		skySphere.Material.TextureScaleY = 1.0
-		skySphere.Material.Emission = geom.NewColor(5, 5, 5)
+		skySphere.Material.Emission = geom.NewColor(1, 1, 1)
 
 		shapes := []shapes.Shape{rightSphere, skySphere}
 

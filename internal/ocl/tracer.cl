@@ -104,6 +104,82 @@ typedef struct intersection_tag {
     int normalIndex;
 } intersection;
 
+inline double maxX(double a, double b, double c) { return max(max(a, b), c); }
+inline double minX(double a, double b, double c) { return min(min(a, b), c); }
+
+inline uint8 FaceFromPoint(double4 point) {
+
+	double absX = fabs(point.x);
+	double  absY = fabs(point.y);
+	double absZ = fabs(point.z);
+	double coord = maxX(absX, absY, absZ);
+
+	if (coord == point.x) {
+		return 0; // right
+	}
+	if (coord == -point.x) {
+		return 1; //"left"
+	}
+	if (coord == point.y) {
+		return 2; //"up"
+	}
+	if (coord == -point.y) {
+		return 3; //"down"
+	}
+	if (coord == point.z) {
+		return 4; // "front"
+	}
+	return 5; //"back"
+}
+
+inline double2 cubeUVFront(double4 point) {
+
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+//
+//inline double2 cubeUVBack(double4 point) {
+//	u := math.Mod(1.0-point.x, 2) / 2.0
+//	v := math.Mod(point.y+1.0, 2) / 2.0
+//    double2 uv;
+//    uv.x = u;
+//    uv.y = v;
+//    return uv;
+//}
+//inline double2 cubeUVLeft(double4 point) {
+//	u := math.Mod(point.z+1.0, 2) / 2.0
+//	v := math.Mod(point.y+1.0, 2) / 2.0
+//	double2 uv;
+//	uv.x = u;
+//	uv.y = v;
+//	return uv;
+//}
+//inline double2 cubeUVRight(double4 point) {
+//	u := math.Mod(1.0-point.z, 2) / 2.0
+//	v := math.Mod(point.y+1.0, 2) / 2.0
+//	double2 uv;
+//	uv.x = u;
+//	uv.y = v;
+//	return uv;
+//}
+//inline double2 cubeUVTop(double4 point) {
+//	u := math.Mod(point.x+1.0, 2) / 2.0
+//	v := math.Mod(1.0-point.z, 2) / 2.0
+//	double2 uv;
+//	uv.x = u;
+//	uv.y = v;
+//	return uv;
+//}
+//inline double2 cubeUVBottom(double4 point) {
+//	u := math.Mod(point.x+1.0, 2) / 2.0
+//	v := math.Mod(point.z+1.0, 2) / 2.0
+//	double2 uv;
+//	uv.x = u;
+//	uv.y = v;
+//	return uv;
+//}
 
 inline double2 sphericalMap(double4 p) {
 
@@ -180,9 +256,6 @@ inline double2 sunflower(int amountPoints, double alpha, int pointNumber, bool r
    return (double2)(r * cos(theta), r * sin(theta));
 }
 
-
-inline double maxX(double a, double b, double c) { return max(max(a, b), c); }
-inline double minX(double a, double b, double c) { return min(min(a, b), c); }
 
 inline double2 checkAxis(double origin, double direction, double minBB, double maxBB) {
     double2 out = (double2){0, 0};
@@ -661,9 +734,9 @@ inline bool findFirstIntersectionCloserThan(__global object *objects, unsigned i
             if (t.x > 0.0 && t.x < minT) {
                 return true;
             }
-            if (t.y > 0.0 && t.y < minT) {
-                return true;
-            }
+//            if (t.y > 0.0 && t.y < minT) {
+//                return true;
+//            }
         } else if (objType == 2) { // CYLINDER
             double4 out = intersectCylinder(tRayOrigin, tRayDirection, objects[j]);
             for (unsigned int a = 0; a < 4; a++) {
@@ -1049,9 +1122,11 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
             // If sampling a light source directly, ignore further bounces and set accColor to emission.
             if (bounces[x].emission.x > 0.0) {
                 // sample light source "as is" if first bounce.
-                if (x == 0) {
-                    accumColor = bounces[x].color; // accumColor + mask * bounces[x].emission;
-                }
+                //if (x == 0) {
+                // we may need to introduce special treatment of skyboxes...
+                    //accumColor = bounces[x].color; // works best for skybox
+                   accumColor = accumColor + mask * bounces[x].color; // Seems to work well for cornell box with reflective sphere
+                //}
                 break;
             }
 
