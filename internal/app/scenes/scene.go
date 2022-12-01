@@ -22,6 +22,9 @@ type Scene struct {
 
 	// Sphere map textures are typically 2:1 format, for example 3840x1920
 	SphereTextures []image.Image
+
+	// Cube textures use a 4:3 format with 6 sides forming a cross. Example is 4096x3072
+	CubeTextures []image.Image
 }
 
 func LoadImage(path string) image.Image {

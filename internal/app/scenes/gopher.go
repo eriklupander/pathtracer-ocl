@@ -7,8 +7,8 @@ import (
 	"github.com/eriklupander/pathtracer-ocl/internal/app/material"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/obj"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/shapes"
-	"io/ioutil"
 	"math"
+	"os"
 )
 
 func GopherScene() func() *Scene {
@@ -63,7 +63,7 @@ func GopherScene() func() *Scene {
 
 		objects := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, frontWall, rightSphere}
 
-		data, err := ioutil.ReadFile("assets/gopher.obj")
+		data, err := os.ReadFile("assets/gopher.obj")
 		if err != nil {
 			panic(err.Error())
 		}

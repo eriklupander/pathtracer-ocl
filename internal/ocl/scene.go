@@ -36,6 +36,7 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 			obj.TextureScaleXNM = in[i].GetMaterial().TextureScaleXNM
 			obj.TextureScaleYNM = in[i].GetMaterial().TextureScaleYNM
 		}
+		obj.IsEnvMap = in[i].GetMaterial().IsEnvMap
 
 		switch in[i].(type) {
 		case *shapes.Plane:
@@ -73,7 +74,7 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		obj.Reflectivity = in[i].GetMaterial().Reflectivity
 
 		// finally, pad!
-		obj.Padding5 = [176]byte{}
+		obj.Padding5 = [175]byte{}
 
 		objs = append(objs, obj)
 	}

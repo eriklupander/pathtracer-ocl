@@ -62,6 +62,8 @@ func main() {
 		scene = scenes.TexturedPlanetsScene()
 	case "envmap":
 		scene = scenes.EnvironmentMap()
+	case "cubemap":
+		scene = scenes.EnvironmentCubeMap()
 	case "reflection":
 		scene = scenes.ReflectionsScene()
 	default:

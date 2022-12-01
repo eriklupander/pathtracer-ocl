@@ -56,8 +56,9 @@ typedef struct __attribute__((packed)) tag_object {
     unsigned char textureIndex;// 1 byte
     bool isTexturedNM;           // 1 byte
     unsigned char textureIndexNM;// 1 byte
+    bool isEnvMap;               // 1 byte
 
-    char padding5[176];        // 194 bytes                    // 1024
+    char padding5[175];          // ==> 1024
 } object;
 
 typedef struct tag_intersection_old {
@@ -73,7 +74,8 @@ typedef struct tag_bounce {
     double4 color;
     double4 emission;
     double4 normal;
-    // refractiveIndex float64
+    double refractiveIndex;
+    bool isEnvMap;
 } bounce;
 
 typedef struct __attribute__((packed)) tag_triangle {
@@ -132,54 +134,135 @@ inline uint8 FaceFromPoint(double4 point) {
 	return 5; //"back"
 }
 
-inline double2 cubeUVFront(double4 point) {
 
+inline double2 cubeUVFrontCross(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(0.25 + u*0.25, 0.6666666-v*0.333333);
+	return uv;
+}
+inline double2 cubeUVBackCross(double4 point) {
+	double u = fmod(1.0-point.x, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(0.75+u*0.25, 0.6666666-v*0.333333);
+	return uv;
+}
+inline double2 cubeUVLeftCross(double4 point) {
+	double u = fmod(point.z+1.0, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(u*0.25, 0.6666666-v*0.333333);
+	return uv;
+}
+inline double2 cubeUVRightCross(double4 point) {
+	double u = fmod(1.0-point.z, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(0.5+u*0.25, 0.6666666-v*0.333333);
+	return uv;
+}
+inline double2 cubeUVTopCross(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(1.0-point.z, 2) / 2.0;
+	double2 uv = (double2)(0.25+u*0.25, 1.0-v*0.333333);
+	return uv;
+}
+inline double2 cubeUVBottomCross(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(point.z+1.0, 2) / 2.0;
+	double2 uv = (double2)(0.25+u*0.25, v*0.333333);
+	return uv;
+}
+
+inline double2 cubeUVFront(double4 point) {
 	double u = fmod(point.x+1.0, 2) / 2.0;
 	double v = fmod(point.y+1.0, 2) / 2.0;
 	double2 uv = (double2)(u, v);
 	return uv;
 }
-//
-//inline double2 cubeUVBack(double4 point) {
-//	u := math.Mod(1.0-point.x, 2) / 2.0
-//	v := math.Mod(point.y+1.0, 2) / 2.0
-//    double2 uv;
-//    uv.x = u;
-//    uv.y = v;
-//    return uv;
-//}
-//inline double2 cubeUVLeft(double4 point) {
-//	u := math.Mod(point.z+1.0, 2) / 2.0
-//	v := math.Mod(point.y+1.0, 2) / 2.0
-//	double2 uv;
-//	uv.x = u;
-//	uv.y = v;
-//	return uv;
-//}
-//inline double2 cubeUVRight(double4 point) {
-//	u := math.Mod(1.0-point.z, 2) / 2.0
-//	v := math.Mod(point.y+1.0, 2) / 2.0
-//	double2 uv;
-//	uv.x = u;
-//	uv.y = v;
-//	return uv;
-//}
-//inline double2 cubeUVTop(double4 point) {
-//	u := math.Mod(point.x+1.0, 2) / 2.0
-//	v := math.Mod(1.0-point.z, 2) / 2.0
-//	double2 uv;
-//	uv.x = u;
-//	uv.y = v;
-//	return uv;
-//}
-//inline double2 cubeUVBottom(double4 point) {
-//	u := math.Mod(point.x+1.0, 2) / 2.0
-//	v := math.Mod(point.z+1.0, 2) / 2.0
-//	double2 uv;
-//	uv.x = u;
-//	uv.y = v;
-//	return uv;
-//}
+inline double2 cubeUVBack(double4 point) {
+	double u = fmod(1.0-point.x, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVLeft(double4 point) {
+	double u = fmod(point.z+1.0, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVRight(double4 point) {
+	double u = fmod(1.0-point.z, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	printf("cube uv right: %f %f\n", u, v);
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVTop(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(1.0-point.z, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVBottom(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(point.z+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+
+
+inline double2 cubeUV(double4 point) {
+
+	double absX = fabs(point[0]);
+	double absY = fabs(point[1]);
+	double absZ = fabs(point[2]);
+	double coord = maxX(absX, absY, absZ);
+
+	if (coord == point[0]) {
+		return cubeUVRightCross(point); // right
+	}
+	if (coord == -point[0]) {
+	     return cubeUVLeftCross(point); //"left"
+	}
+	if (coord == point[1]) {
+		return cubeUVTopCross(point); //"up"
+	}
+	if (coord == -point[1]) {
+		return cubeUVBottomCross(point); //"down"
+	}
+	if (coord == point[2]) {
+	  	return cubeUVFrontCross(point); // "front"
+	}
+
+	return cubeUVBackCross(point); //"back"
+}
+
+// cubeUVCross returns uv coordinates given a "cross"-shaped cubemap texture
+inline double2 cubeUVCross(double4 point) {
+
+	double absX = fabs(point[0]);
+	double absY = fabs(point[1]);
+	double absZ = fabs(point[2]);
+	double coord = maxX(absX, absY, absZ);
+
+	if (coord == point[0]) {
+		return cubeUVRight(point); // right
+	}
+	if (coord == -point[0]) {
+	     return cubeUVLeft(point); //"left"
+	}
+	if (coord == point[1]) {
+		return cubeUVTop(point); //"up"
+	}
+	if (coord == -point[1]) {
+		return cubeUVBottom(point); //"down"
+	}
+	if (coord == point[2]) {
+	  	return cubeUVFront(point); // "front"
+	}
+
+	return cubeUVBack(point); //"back"
+}
 
 inline double2 sphericalMap(double4 p) {
 
@@ -701,177 +784,6 @@ inline intersection findClosestIntersection(__local object *objects, unsigned in
 }
 
 
-// findFirstIntersectionCloserThan returns true if an intersection is found that's closer than minT and which is not
-// ignoreIndex. This function is very similar to findClosestIntersection and should be refactored into something more
-// common. However, the triangle intersection code is somewhat tricky to generalize.
-inline bool findFirstIntersectionCloserThan(__global object *objects, unsigned int numObjects, __global group *groups, __global triangle *triangles, double4 rayOrigin, double4 rayDirection, double minT, unsigned int ignoreIndex) {
-
-    // ----------------------------------------------------------
-    // Loop through scene objects in order to find intersections
-    // ----------------------------------------------------------
-    for (unsigned int j = 0; j < numObjects; j++) {
-        if (j == ignoreIndex) {
-            continue;
-        }
-        long objType = objects[j].type;
-        //  translate our ray into object space by multiplying ray pos and dir
-        //  with inverse object matrix
-        double4 tRayOrigin = mul(objects[j].inverse, rayOrigin);
-        double4 tRayDirection = mul(objects[j].inverse, rayDirection);
-
-        // Intersection code
-        if (objType == 0) { // PLANE - intersect transformed ray with plane
-            double t = intersectPlane(tRayOrigin, tRayDirection);
-            if (t > 0.0 && t < minT) {
-                return true;
-            }
-        } else if (objType == 1) { // SPHERE
-
-            // finally, find the intersection distances on our ray.
-            double2 t = intersectSphere(tRayOrigin, tRayDirection);
-            // double t2 = (-b + sqrt(discriminant)) / (2*a); // add back in
-            // when we do refraction
-            if (t.x > 0.0 && t.x < minT) {
-                return true;
-            }
-//            if (t.y > 0.0 && t.y < minT) {
-//                return true;
-//            }
-        } else if (objType == 2) { // CYLINDER
-            double4 out = intersectCylinder(tRayOrigin, tRayDirection, objects[j]);
-            for (unsigned int a = 0; a < 4; a++) {
-                if (out[a] > 0.0 && out[a] < minT) {
-                    return true;
-                }
-            }
-        } else if (objType == 3) { // BOX
-            double2 out = intersectCube(tRayOrigin, tRayDirection);
-
-            // assign intersections
-            if (out.x > 0.0 && out.x < minT) {
-               return true;
-            }
-            if (out.y > 0.0 && out.y < minT) {
-               return true;
-            }
-
-        } else if (objType == 4) { // GROUPS
-
-            // Group with triangles experiment
-            // Groups MUST have their bounds computed. Start by checking if ray intersects bounds.
-            // Remember: At this point in the code, the group's transform has already modified the ray.
-            // However, the cube intersection is based on transform/rotate/scale to unit cube. Our BB does not
-            // really work that way...
-            // Note!! BB must have extent in all 3-axises. I.e two triangles forming a wall facing the Z axis will have 0
-            // depth which breaks the intersect code. (typically, use this for models that's rarely flat, or fake something if 0.)
-            // Using this BB only reduces teapot with 8 samples from 3m29.753546781s to 31.606680099s.
-            // Further, adding the BB check for each node in the tree further reduces the time taken to 4.037422895s
-            if (!intersectRayWithBox(tRayOrigin, tRayDirection, objects[j].bbMin, objects[j].bbMax)) {
-                // skipped++;
-                continue;
-            }
-            // hit++;
-
-            // If the "object" BB was intersected, we take a look at the "object's" groupOffset. If > -1, we
-            // need to set up a local stack to traverse the group hierarchy
-            if (objects[j].childCount > 0) {
-
-                // this is somewhat ugly, but since a "parent" obj (from objects) may have up to 64 children
-                // (references to indexes in "groups"), we must use a for-statement here.
-                for (int childIndex = 0; childIndex < objects[j].childCount; childIndex++) {
-                    // START PSUEDO-RECURSIVE CODE
-                    // 1) Create an empty stack. (move to top later)
-                    int stack[64] = {0};
-
-                    // Stack index, i.e. current "depth" of stack
-                    int currentSIndex = 0;
-
-                    // Tree index, i.e. which "node index" we're currently processing
-                    int currentNodeIndex = objects[j].children[childIndex];
-
-                    // Initialize current node as root. Note the ugly code to get a pointer to the current node...
-                    group root = groups[currentNodeIndex];
-                    group *current = &root;
-
-                    for (; current != 0 || currentSIndex > -1;) {
-                        for (; current != 0 && intersectRayWithBox(tRayOrigin, tRayDirection, current->bbMin, current->bbMax);) {
-
-                            // Iterate over all triangles and record triangle/ray intersections...
-                            for (int n = current->triOffset; n < current->triOffset + current->triCount; n++) {
-
-                                double4 dirCrossE2 = cross(tRayDirection, triangles[n].e2);
-                                double determinant = dot(triangles[n].e1, dirCrossE2);
-                                if (fabs(determinant) < EPSILON) {
-                                    continue;
-                                }
-
-                                // Triangle misses over P1-P3 edge
-                                double f = 1.0 / determinant;
-                                double4 p1ToOrigin = tRayOrigin - triangles[n].p1;
-                                double u = f * dot(p1ToOrigin, dirCrossE2);
-                                if (u < 0 || u > 1) {
-                                    continue;
-                                }
-
-                                double4 originCrossE1 = cross(p1ToOrigin, triangles[n].e1);
-                                double v = f * dot(tRayDirection, originCrossE1);
-                                if (v < 0 || (u + v) > 1) {
-                                    continue;
-                                }
-                                double t = f * dot(triangles[n].e2, originCrossE1);
-                                if (t > 0.0 && t < minT) {
-                                    return true;
-                                }
-                            }
-
-                            // Push the current node index to the Stack, i.e. add at current index and then increment the stack depth.
-                            stack[currentSIndex] = currentNodeIndex;
-                            currentSIndex++;
-
-                            // if the left child is populated (i.e. > -1), update currentNodeIndex with left child and
-                            // update the pointer to the current node
-                            if (current->children[0] > 0) {
-                                currentNodeIndex = current->children[0];
-                                root = groups[current->children[0]];
-                                current = &root;
-                            } else {
-                                // If no left child, mark current as nil, so we can exit the inner for.
-                                current = 0;
-                            }
-                        } // exit of inner for loop, i.e. carry on to the right side
-
-                        // We pop our stack by decrementing (remember, the last iteration above resulting an increment, but no push. (Fix?)
-                        currentSIndex--;
-                        if (currentSIndex == -1) {
-                            goto done;
-                        }
-
-                        // get the popped item by fetching the node index from the current stack index.
-                        root = groups[stack[currentSIndex]];
-                        current = &root;
-
-                        // we're done with the left subtree, check if there's a right-hand node.
-                        if (current->children[1] > 0) {
-                            // if there's a right-hand node, update the node index and the current node.
-                            currentNodeIndex = current->children[1];
-                            root = groups[current->children[1]];
-                            current = &root;
-                        } else {
-                            // if no right-hand side, set current to nil. In a binary tree, we should
-                            // always get a right side if we got a left side...
-                            current = 0;
-                        }
-                    }
-                    // END PSUEDO-RECURSIVE CODE
-                done:
-                    current = 0;
-                }
-            }
-        }
-    }
-    return false;
-}
-
 inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, float rndY, int sample, int totalSamples) {
     double4 pointInView = {0.0, 0.0, -1.0, 1.0};
     double4 originPoint = {0.0, 0.0, 0.0, 1.0};
@@ -908,13 +820,59 @@ inline ray rayForPixel(unsigned int x, unsigned int y, camera cam, float rndX, f
     return r;
 }
 
+// nextEventEstimation is a very efficient method of reducing noise by directly sampling all light sources for each bounce,
+// checking for line of sight to a random point on every lightsource. However, NEE only works reasonably well with diffuse
+// materials.
+//
+// This function operates on a
+inline void nextEventEstimation(__local object *objects, unsigned int numObjects, __global group *groups, __global triangle *triangles, bounce *b, double fgi, double fgi2, double n, double4 mask, unsigned int x, double4 *accumColor) {
+    for (unsigned int l = 0; l < numObjects;l++) {
+        if (objects[l].emission.x > 0.0) { // Note: handle if we have a light source without red emission...
+
+            double4 lightOriginPosition = (double4)(objects[l].transform[3], objects[l].transform[7], objects[l].transform[11], 0.0); // note .w will be == 1 after next line
+            double scaleBy = max(max(objects[l].transform[0], objects[l].transform[5]), objects[l].transform[10]);
+            double4 lightScale = (double4)(scaleBy, scaleBy, scaleBy, 1.0);
+            double4 rpos = randomPointOnSphere(1.0, noise3D(fgi, n+x*l, fgi2), noise3D(fgi, fgi2, n+x*x*l));
+            double4 lightPosition = lightOriginPosition + (rpos * lightScale);
+
+            double4 shadowRayDirection = normalize(lightPosition - b->point);
+            double4 shadowRayOrigin = b->point + (shadowRayDirection*EPSILON); // take a slight overpos
+
+            double lightDotNormal = dot(shadowRayDirection, b->normal);
+            if (lightDotNormal > 0.0) {
+
+                // now, we need to check if the shadowRay intersects any scene object EXCEPT our light source...
+                context ctx = {{0},{0},{0},{0},{0}};
+                intersection ixs = findClosestIntersection(objects, numObjects, groups, triangles, shadowRayOrigin, shadowRayDirection, &ctx);
+                if (ixs.lowestIntersectionIndex == l && ixs.t > EPSILON) {
+                    double4 effectiveColor = b->color * objects[l].emission;
+
+                    // I've seen this as well:
+                    // l += light.getPower() * cos * cosp * rectangle.getArea() / lengthSquared;
+                    // perhaps use the surface area of the light's hemisphere and divide by t*t?
+                    // 2*Pi*r2
+                    //double attenuation = 2*PI*objects[0].transform[0]*objects[0].transform[0] / ((0.25+ixs.t)*(0.25+ixs.t));
+
+                    // Christian's attenuation based on % of hemisphere which is covered by light source.
+                    // Note 8 months later: I can't figure out why I'm using that value from the object's transform...
+                    // ..it may be a trick to not accidently divide by zero? But what if x is == 0 and t is 0????
+                    double attenuation = 1 - ixs.t / sqrt(ixs.t*ixs.t + objects[l].transform[0]*objects[l].transform[0]);
+
+                    // Compute and accumulate color
+                    *accumColor += effectiveColor * lightDotNormal * mask * attenuation;
+                }
+            }
+        }
+    }
+}
+
 // the sampler is used to "pick" colors from textures using normalized (e.g. floating point) coordinates where
 // CLK_ADDRESS_REPEAT makes sure that we don't get "mirrored" textures when crossing the 1.0 or 0.0 boundaries.
 __constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_LINEAR;
 
 __kernel void trace(__constant object *global_objects, unsigned int numObjects, __global triangle *triangles, __global group *groups, __global double *output,
                     __constant double *seedX, unsigned int samples, __global camera *cam, unsigned int yOffset,
-                    image2d_array_t image, image2d_array_t sphereTextures) {
+                    image2d_array_t image, image2d_array_t sphereTextures, image2d_array_t cubeMapTextures) {
 
     // int skipped = 0;
     // int hit = 0;
@@ -925,8 +883,6 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
     fgi2 = seedX[i] / samples;
     double4 originPoint = (double4)(0.0f, 0.0f, 0.0f, 1.0f);
     double4 colors = (double4)(0, 0, 0, 0);
-
-
 
     // experiment: copy objects to local memory. May actually be faster, at least on CPU?
     __local object objects[16];
@@ -1017,7 +973,6 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                 } else if (obj.type == 4) {
                     // GROUP, which in practice means a triangle, whose normal is typically pre-populated in N and stored in xsTriangles
                     objectNormal = ctx.xsTriangle[ixs.normalIndex];
-                    // printf("object normal: %f %f %f\n", objectNormal.x, objectNormal.y, objectNormal.z);
                 }
                 // Finish the normal vector by multiplying it back into world coord
                 // using the inverse transpose matrix and then normalize it
@@ -1052,41 +1007,39 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                     double4 norm = (normalVec * 2.0) * dotScalar;
                     rayDirection = rayDirection - norm;
                 }
-
                 rayOrigin = overPoint;
 
                 // Calculate the cosine of the OUTGOING ray in relation to the surface
                 // normal.
                 double cosine = dot(rayDirection, normalVec);
+
                 // Finish this iteration by storing the bounce.
                 if (obj.type == 4) {
-                    bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec};
+                    bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec, 1.0, obj.isEnvMap};
                     bounces[b] = bnce;
                 } else {
-                    // texture experiment for PLANE and SPHERE
+                    // texture experiment for PLANE, CUBE and SPHERE
                     double4 color = obj.color;
                     if (obj.isTextured) {
-                          if (obj.type == 0) {
+                          if (obj.type == 0) { // PLANE
                               double4 localPoint = mul(obj.inverse, position);
                               float4 rgba = read_imagef(image, sampler, (float4)(localPoint.x * obj.textureScaleX, localPoint.z * obj.textureScaleY, obj.textureIndex, 0));
                               color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
-                          }
-                          if (obj.type == 1) {
-                                double4 localPoint = mul(obj.inverse, position);
-                                double2 uv = sphericalMap(localPoint);
-                                float4 rgba = read_imagef(sphereTextures, sampler, (float4)(uv.x, 1.0-uv.y, obj.textureIndex, 0));
-                                color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                          } else if (obj.type == 1) { // SPHERE
+                              double4 localPoint = mul(obj.inverse, position);
+                              double2 uv = sphericalMap(localPoint);
+                              float4 rgba = read_imagef(sphereTextures, sampler, (float4)(uv.x, 1.0-uv.y, obj.textureIndex, 0));
+                              color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                          } else if (obj.type == 3) { // CUBE
+                              double4 localPoint = mul(obj.inverse, position);
+                              double2 uv = cubeUV(localPoint);
+                              float4 rgba = read_imagef(cubeMapTextures, sampler, (float4)(uv.x, uv.y, obj.textureIndex, 0));
+                              color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
                           }
                     }
-
-                    if (obj.type == 1 && obj.emission.x == 0.0) {
-                       // printf("check color for sphere...\n");
-                    }
-
-                    bounce bnce = {position, cosine, color, obj.emission, normalVec};
+                    bounce bnce = {position, cosine, color, obj.emission, normalVec, 1.0, obj.isEnvMap};
                     bounces[b] = bnce;
                 }
-
                 actualBounces++;
             }
         }
@@ -1119,65 +1072,24 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
 
             // sixth run - sample the (point) light source on each bounce
 
-            // If sampling a light source directly, ignore further bounces and set accColor to emission.
-            if (bounces[x].emission.x > 0.0) {
-                // sample light source "as is" if first bounce.
-                //if (x == 0) {
-                // we may need to introduce special treatment of skyboxes...
-                    //accumColor = bounces[x].color; // works best for skybox
-                   accumColor = accumColor + mask * bounces[x].color; // Seems to work well for cornell box with reflective sphere
-                //}
+            bounce bnce = bounces[x];
+            accumColor = accumColor + mask * bnce.emission;
+
+            // If sampling a light source, ignore further bounces and set accumulated color
+            if (bnce.emission.x > 0.0) {
+                //accumColor = accumColor + mask * bnce.color; // original just used emission here.
                 break;
             }
 
-            // HERE - iterate over all light sources in the scene, accumulate light from all.
-            for (unsigned int l = 0; l < numObjects;l++) {
-                if (objects[l].emission.x > 0.0) {
-                    double4 lightOriginPosition = (double4)(objects[l].transform[3], objects[l].transform[7], objects[l].transform[11], 0.0); // note .w will be == 1 after next line
-                    double scaleBy = max(max(objects[l].transform[0], objects[l].transform[5]), objects[l].transform[10]);
-                    double4 lightScale = (double4)(scaleBy, scaleBy, scaleBy, 1.0);
-                    double4 rpos = randomPointOnSphere(1.0, noise3D(fgi, n+x*l, fgi2), noise3D(fgi, fgi2, n+x*x*l));
-                    double4 lightPosition = lightOriginPosition + (rpos * lightScale);
-
-
-                    double4 shadowRayDirection = normalize(lightPosition - bounces[x].point);
-                    double4 shadowRayOrigin = bounces[x].point + (shadowRayDirection*EPSILON); // take a slight overpos
-
-                    double lightDotNormal = dot(shadowRayDirection, bounces[x].normal);
-                    if (lightDotNormal > 0.0) {
-
-                        // now, we need to check if the shadowRay intersects any scene object EXCEPT our light source...
-                        context ctx = {{0},{0},{0},{0},{0}};
-                        intersection ixs = findClosestIntersection(objects, numObjects, groups, triangles, shadowRayOrigin, shadowRayDirection, &ctx);
-                        if (ixs.lowestIntersectionIndex == l && ixs.t > EPSILON) {
-                            double4 effectiveColor = bounces[x].color * objects[l].emission;
-
-                            // I've seen this as well:
-                            // l += light.getPower() * cos * cosp * rectangle.getArea() / lengthSquared;
-                            // perhaps use the surface area of the light's hemisphere and divide by t*t?
-                            // 2*Pi*r2
-                            //double attenuation = 2*PI*objects[0].transform[0]*objects[0].transform[0] / ((0.25+ixs.t)*(0.25+ixs.t));
-
-                            // Christian's attenuation based on % of hemisphere which is covered by light source.
-                            // Note 8 months later: I can't figure out why I'm using that value from the object's transform...
-                            // ..it may be a trick to not accidently divide by zero? But what if x is == 0 and t is 0????
-                            double attenuation = 1 - ixs.t / sqrt(ixs.t*ixs.t + objects[l].transform[0]*objects[l].transform[0]);
-
-                            // Compute and accumulate color
-                            accumColor += effectiveColor * lightDotNormal * mask * attenuation;
-                        }
-                    }
-                }
-            }
-
-
+            // HERE - iterate over all light sources in the scene, accumulate light from all, updating accumColor
+            //nextEventEstimation(objects, numObjects, groups, triangles, &bnce, fgi, fgi2, n, mask, x, &accumColor);
 
             // Update the mask by multiplying it with the hit object's color
-            mask *= bounces[x].color;
+            mask *= bnce.color;
 
             // perform cosine-weighted importance sampling by multiplying the mask
             // with the cosine
-            mask *= bounces[x].cos;
+            mask *= bnce.cos;
         }
 
         // Finish this "sample" by adding the accumulated color to the total

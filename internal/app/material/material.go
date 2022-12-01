@@ -17,6 +17,7 @@ type Material struct {
 	TextureIDNM     uint8
 	TextureScaleXNM float64
 	TextureScaleYNM float64
+	IsEnvMap        bool
 }
 
 func NewDefaultMaterial() Material {

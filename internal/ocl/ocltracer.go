@@ -45,8 +45,9 @@ type CLObject struct {
 	TextureIndex     uint8      // 1 byte
 	IsTexturedNM     bool       // 1 byte
 	TextureIndexNM   uint8      // 1 byte
+	IsEnvMap         bool       // 1 byte
 
-	Padding5 [176]byte
+	Padding5 [175]byte
 }
 
 type CLGroup struct {
@@ -96,7 +97,7 @@ type CLCamera struct {
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceIndex, height, samples int, camera CLCamera, textures []image.Image, sphereTextures []image.Image) []float64 {
+func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceIndex, height, samples int, camera CLCamera, textures []image.Image, sphereTextures []image.Image, cubeTextures []image.Image) []float64 {
 	numPixels := int(camera.Width * camera.Height)
 	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
 
@@ -178,6 +179,8 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	defer texturesArrayMemObj.Release()
 	sphereTexturesArrayMemObj := prepareTextures(context, sphereTextures)
 	defer sphereTexturesArrayMemObj.Release()
+	cubeTexturesArrayMemObj := prepareTextures(context, cubeTextures)
+	defer cubeTexturesArrayMemObj.Release()
 
 	//// Prepare sphere textures
 	//var sphereTexturesMemObj *cl.MemObject
@@ -241,7 +244,7 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	}
 	for y := 0; y < height; y += batchSize {
 		st := time.Now()
-		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize, texturesArrayMemObj, sphereTexturesArrayMemObj)...)
+		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize, texturesArrayMemObj, sphereTexturesArrayMemObj, cubeTexturesArrayMemObj)...)
 		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
 	}
 
@@ -276,7 +279,7 @@ func prepareTextures(context *cl.Context, textures []image.Image) *cl.MemObject 
 	return memObj
 }
 
-func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int, texturesMemObj *cl.MemObject, sphereTexturesMemObj *cl.MemObject) []float64 {
+func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, camera CLCamera, context *cl.Context, kernel *cl.Kernel, queue *cl.CommandQueue, samples, workGroupSize, rowOffset, rowsPerBatch int, texturesMemObj *cl.MemObject, sphereTexturesMemObj *cl.MemObject, cubeTexturesMemObj *cl.MemObject) []float64 {
 	pixelsInBatch := rowsPerBatch * int(camera.Width)
 
 	// populate seed of random numbers, OpenCL can't do random by itself AFAIK
@@ -366,7 +369,7 @@ func computeBatch(objects []CLObject, triangles []CLTriangle, groups []CLGroup, 
 	//queue.EnqueueWriteImage(memObj, true, []int{0}, []int{0}, 0, 0, )
 
 	// 5.4 Kernel is our program and here we explicitly bind our parameters to it
-	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, groupsBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset), texturesMemObj, sphereTexturesMemObj); err != nil {
+	if err := kernel.SetArgs(objectsBuffer, uint32(len(objects)), trianglesBuffer, groupsBuffer, output, seedBuffer, uint32(samples), cameraBuffer, uint32(rowOffset), texturesMemObj, sphereTexturesMemObj, cubeTexturesMemObj); err != nil {
 		logrus.Fatalf("SetKernelArgs failed: %+v", err)
 	}
 
