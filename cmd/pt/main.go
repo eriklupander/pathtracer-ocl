@@ -66,6 +66,10 @@ func main() {
 		scene = scenes.EnvironmentCubeMap()
 	case "reflection":
 		scene = scenes.ReflectionsScene()
+	case "transparency":
+		scene = scenes.TransparencyScene()
+	case "transparent_teapot":
+		scene = scenes.TransparentTeapotScene()
 	default:
 		scene = scenes.OCLScene()
 	}

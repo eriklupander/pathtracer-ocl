@@ -1,5 +1,5 @@
 __constant double PI = 3.14159265359f;
-__constant unsigned int MAX_BOUNCES = 4;
+__constant unsigned int MAX_BOUNCES = 6;
 __constant double EPSILON = 0.0001;
 
 typedef struct __attribute__((packed)) tag_camera {
@@ -56,9 +56,9 @@ typedef struct __attribute__((packed)) tag_object {
     unsigned char textureIndex;// 1 byte
     bool isTexturedNM;           // 1 byte
     unsigned char textureIndexNM;// 1 byte
-    bool isEnvMap;               // 1 byte
-
-    char padding5[175];          // ==> 1024
+    bool isRefraction;               // 1 byte
+    char label[8];               // 8 bytes
+    char padding5[167];          // ==> 1024
 } object;
 
 typedef struct tag_intersection_old {
@@ -75,7 +75,7 @@ typedef struct tag_bounce {
     double4 emission;
     double4 normal;
     double refractiveIndex;
-    bool isEnvMap;
+    bool isRefraction;
 } bounce;
 
 typedef struct __attribute__((packed)) tag_triangle {
@@ -108,32 +108,6 @@ typedef struct intersection_tag {
 
 inline double maxX(double a, double b, double c) { return max(max(a, b), c); }
 inline double minX(double a, double b, double c) { return min(min(a, b), c); }
-
-inline uint8 FaceFromPoint(double4 point) {
-
-	double absX = fabs(point.x);
-	double  absY = fabs(point.y);
-	double absZ = fabs(point.z);
-	double coord = maxX(absX, absY, absZ);
-
-	if (coord == point.x) {
-		return 0; // right
-	}
-	if (coord == -point.x) {
-		return 1; //"left"
-	}
-	if (coord == point.y) {
-		return 2; //"up"
-	}
-	if (coord == -point.y) {
-		return 3; //"down"
-	}
-	if (coord == point.z) {
-		return 4; // "front"
-	}
-	return 5; //"back"
-}
-
 
 inline double2 cubeUVFrontCross(double4 point) {
 	double u = fmod(point.x+1.0, 2) / 2.0;
@@ -172,44 +146,6 @@ inline double2 cubeUVBottomCross(double4 point) {
 	return uv;
 }
 
-inline double2 cubeUVFront(double4 point) {
-	double u = fmod(point.x+1.0, 2) / 2.0;
-	double v = fmod(point.y+1.0, 2) / 2.0;
-	double2 uv = (double2)(u, v);
-	return uv;
-}
-inline double2 cubeUVBack(double4 point) {
-	double u = fmod(1.0-point.x, 2) / 2.0;
-	double v = fmod(point.y+1.0, 2) / 2.0;
-	double2 uv = (double2)(u, v);
-	return uv;
-}
-inline double2 cubeUVLeft(double4 point) {
-	double u = fmod(point.z+1.0, 2) / 2.0;
-	double v = fmod(point.y+1.0, 2) / 2.0;
-	double2 uv = (double2)(u, v);
-	return uv;
-}
-inline double2 cubeUVRight(double4 point) {
-	double u = fmod(1.0-point.z, 2) / 2.0;
-	double v = fmod(point.y+1.0, 2) / 2.0;
-	printf("cube uv right: %f %f\n", u, v);
-	double2 uv = (double2)(u, v);
-	return uv;
-}
-inline double2 cubeUVTop(double4 point) {
-	double u = fmod(point.x+1.0, 2) / 2.0;
-	double v = fmod(1.0-point.z, 2) / 2.0;
-	double2 uv = (double2)(u, v);
-	return uv;
-}
-inline double2 cubeUVBottom(double4 point) {
-	double u = fmod(point.x+1.0, 2) / 2.0;
-	double v = fmod(point.z+1.0, 2) / 2.0;
-	double2 uv = (double2)(u, v);
-	return uv;
-}
-
 
 inline double2 cubeUV(double4 point) {
 
@@ -237,32 +173,6 @@ inline double2 cubeUV(double4 point) {
 	return cubeUVBackCross(point); //"back"
 }
 
-// cubeUVCross returns uv coordinates given a "cross"-shaped cubemap texture
-inline double2 cubeUVCross(double4 point) {
-
-	double absX = fabs(point[0]);
-	double absY = fabs(point[1]);
-	double absZ = fabs(point[2]);
-	double coord = maxX(absX, absY, absZ);
-
-	if (coord == point[0]) {
-		return cubeUVRight(point); // right
-	}
-	if (coord == -point[0]) {
-	     return cubeUVLeft(point); //"left"
-	}
-	if (coord == point[1]) {
-		return cubeUVTop(point); //"up"
-	}
-	if (coord == -point[1]) {
-		return cubeUVBottom(point); //"down"
-	}
-	if (coord == point[2]) {
-	  	return cubeUVFront(point); // "front"
-	}
-
-	return cubeUVBack(point); //"back"
-}
 
 inline double2 sphericalMap(double4 p) {
 
@@ -301,14 +211,11 @@ inline double2 sphericalMap(double4 p) {
 	return res;
 }
 
-
-
 inline int round2(double number) {
    int sign = (int)((number > 0) - (number < 0));
    int odd = ((int)number % 2); // odd -> 1, even -> 0
    return ((int)(number-sign*(0.5-odd)));
 }
-
 
 inline double sunflowerRadius(double i, double n, double b) {
   double r = 1.0; // put on boundary
@@ -338,7 +245,6 @@ inline double2 sunflower(int amountPoints, double alpha, int pointNumber, bool r
 
    return (double2)(r * cos(theta), r * sin(theta));
 }
-
 
 inline double2 checkAxis(double origin, double direction, double minBB, double maxBB) {
     double2 out = (double2){0, 0};
@@ -402,7 +308,8 @@ inline double2 intersectCaps(double4 origin, double4 direction, double minY, dou
     return retVal;
 }
 
-// from https://stackoverflow.com/a/50665114
+// from https://stackoverflow.com/a/50665114. Perhaps try to find a better way to create random numbers? Maybe
+// it's possible to preload all random numbers and/or cycle a finite set?
 inline static float noise3D(float x, float y, float z) {
     float ptr = 0.0f;
     return fract(sin(x * 112.9898f + y * 179.233f + z * 237.212f) * 43758.5453f, &ptr);
@@ -572,6 +479,56 @@ inline double intersectPlane(double4 tRayOrigin, double4 tRayDirection) {
             return -tRayOrigin.y / tRayDirection.y;
     }
     return 0.0;
+}
+
+inline double schlick(double4 eyeVec, double4 normalVec, double n1, double n2) {
+
+    // find the cosine of the angle between the eye and normal vectors using Dot
+    double cos = dot(eyeVec, normalVec);
+    // total internal reflection can only occur if n1 > n2
+    if (n1 > n2) {
+        double n = n1 / n2;
+        double sin2Theta = (n * n) * (1.0 - (cos * cos));
+        if (sin2Theta > 1.0) {
+            return 1.0;
+        }
+        // compute cosine of theta_t using trig identity
+        double cosTheta = sqrt(1.0 - sin2Theta);
+
+        // when n1 > n2, use cos(theta_t) instead
+        cos = cosTheta;
+    }
+    double temp = (n1 - n2) / (n1 + n2);
+    double r0 = temp * temp;
+    return r0 + (1-r0)*pow(1-cos, 5);
+}
+
+inline double4 computeRefractedRay(double4 eyeVector, double4 normalVec, double n1, double n2) {
+    // Find the ratio of first index of refraction to the second.
+	double nRatio = n1 / n2;
+
+	// cos(theta_i) is the same as the dot product of the two vectors
+	double cosI = dot(eyeVector, normalVec);
+
+	// Find sin(theta_t)^2 via trigonometric identity
+	double sin2Theta = (nRatio * nRatio) * (1.0 - (cosI * cosI));
+	if (sin2Theta > 1.0) {
+	    // was black, how to handle?? This is probably that famous total reflectance?
+	    // In the original ray-tracer, this meant that the refraction did not contribute any "color" to
+	    // the final pixel color.
+		return (double4)(0,0,0,0);
+	}
+
+	// Find cos(theta_t) via trigonometric identity
+	double cosTheta = sqrt(1.0 - sin2Theta);
+
+	// Compute the direction of the refracted ray
+	double4 direction = (normalVec * ((nRatio*cosI)-cosTheta)) - eyeVector * nRatio;
+
+    // Return the refracted ray direction vector (use underpoint at callsite)
+    return direction;
+
+	//refractRay := mat.NewRay(comps.UnderPoint, direction)
 }
 
 // findClosestIntersection returns the closest intersection. NOTE! It possible we could optimize this for shadow rays,
@@ -858,7 +815,7 @@ inline void nextEventEstimation(__local object *objects, unsigned int numObjects
                     // ..it may be a trick to not accidently divide by zero? But what if x is == 0 and t is 0????
                     double attenuation = 1 - ixs.t / sqrt(ixs.t*ixs.t + objects[l].transform[0]*objects[l].transform[0]);
 
-                    // Compute and accumulate color
+                    // Compute and update the accumulate color pointer passed to the function
                     *accumColor += effectiveColor * lightDotNormal * mask * attenuation;
                 }
             }
@@ -906,7 +863,9 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
         unsigned int actualBounces = 0;
         // Each ray may bounce up to 5 times
         __local bounce bounces[16]; // = {};
-
+        bool entering = false;
+        bool inside = false;
+        bool exiting = false;
         for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
 
             context ctx = {{0},{0},{0},{0},{0}};
@@ -998,9 +957,59 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
 
                 // Impl here supports either diffuse or reflected, but for obj.reflectivity > 0 a proportionate portion of samples
                 // will diffuse instead of reflect. Poor-man's BRDF
-                if (obj.reflectivity == 0.0 || noise3D(fgi, n, b) > obj.reflectivity) {
+                double cosine = 1.0; // experiment: for reflected, always use 1.0
+                entering = false;
+                exiting = false;
+                double sch = 0.0;
+                if (obj.refractiveIndex != 1.0) {
+                    if (!inside) {
+                        // if we have hit a refractive object and we're not inside one...
+
+                        // compute schlick to determine chance of reflection
+                        sch = schlick(eyeVector, normalVec,  1.0, obj.refractiveIndex);
+                        double rnd = noise3D(fgi, n*n, b);
+                         if (x == 248 && y == 321) {
+                            printf("schlick was %f, chance was %f\n", sch, rnd);
+
+                         }
+                        if (sch < rnd) {
+                            // refraction
+                            rayDirection = computeRefractedRay(eyeVector, normalVec,  1.0, obj.refractiveIndex);
+                            overPoint = position - normalVec * EPSILON;
+                            inside = true;
+                            entering = true;
+                            exiting = false;
+                        } else {
+                            // reflection
+                            double dotScalar = dot(rayDirection, normalVec);
+                            double4 norm = (normalVec * 2.0) * dotScalar;
+                            rayDirection = rayDirection - norm;
+                        }
+                    } else {
+                        // If already inside, we are passing back into air but we may still reflect internally in the medium??
+                         double sch = schlick(eyeVector, normalVec,  obj.refractiveIndex, 1.0);
+                         if (sch < noise3D(fgi, n*n, b)) {
+                            // refract back into air
+                            rayDirection = computeRefractedRay(eyeVector, normalVec,  obj.refractiveIndex, 1.0);
+                            overPoint = position - normalVec * EPSILON;
+                            inside = false;
+                            entering = false;
+                            exiting = true;
+                         } else {
+                            // internal reflection??
+                            double dotScalar = dot(rayDirection, normalVec);
+                            double4 norm = (normalVec * 2.0) * dotScalar;
+                            rayDirection = rayDirection - norm;
+                            entering = false;
+                            exiting = false;
+                         }
+                    }
+                } else if (obj.reflectivity == 0.0 || noise3D(fgi, n, b) > obj.reflectivity) {
                     // Diffuse
                     rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
+                    // Calculate the cosine of the OUTGOING ray in relation to the surface
+                    // normal.
+                    cosine = dot(rayDirection, normalVec);
                 } else {
                     // Reflected, calculate reflection vector and set as rayDirection
                     double dotScalar = dot(rayDirection, normalVec);
@@ -1009,13 +1018,14 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                 }
                 rayOrigin = overPoint;
 
-                // Calculate the cosine of the OUTGOING ray in relation to the surface
-                // normal.
-                double cosine = dot(rayDirection, normalVec);
+                if (x == 248 && y == 321) {
+                    printf("iteration: %d === intersected: %s === schlick: %f ===new origin: %f, %f, %f ==== direction: %f %f %f\n", b, obj.label,sch, rayOrigin.x, rayOrigin.y, rayOrigin.z, rayDirection.x, rayDirection.y, rayDirection.z);
+                }
 
-                // Finish this iteration by storing the bounce.
+                // Finish this iteration by storing the bounce. Objects (with triangles) gets special treatment
+                // since a model may have many different materials. See xsTriangleColor
                 if (obj.type == 4) {
-                    bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec, 1.0, obj.isEnvMap};
+                    bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec, 1.0, entering || exiting};
                     bounces[b] = bnce;
                 } else {
                     // texture experiment for PLANE, CUBE and SPHERE
@@ -1037,10 +1047,16 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                               color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
                           }
                     }
-                    bounce bnce = {position, cosine, color, obj.emission, normalVec, 1.0, obj.isEnvMap};
+                    bounce bnce = {position, cosine, color, obj.emission, normalVec, 1.0, entering || exiting};
                     bounces[b] = bnce;
                 }
+
                 actualBounces++;
+
+                // experiment - stop bouncing if intersecting a light source
+                if (obj.emission.x > 0.0) {
+                    break;
+                }
             }
         }
 
@@ -1049,6 +1065,7 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
         // ------------------------------------ //
         double4 accumColor = (double4)(0.0, 0.0, 0.0, 0.0);
         double4 mask = (double4)(1.0, 1.0, 1.0, 1.0);
+        unsigned int imageX = x;
         for (unsigned int x = 0; x < actualBounces; x++) {
 
             // first run - just use the material color of the first bounce
@@ -1073,22 +1090,38 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
             // sixth run - sample the (point) light source on each bounce
 
             bounce bnce = bounces[x];
+            if (imageX == 248 && y == 321) {
+                printf("bounce: %d === refraction: %d \n", x, bnce.isRefraction);
+            }
+
+            // when refracting, simply pass updating color, mask etc for this bounce.
+            if (bnce.isRefraction) {
+                continue;
+            }
+
+            // add "strength" multiplied by remaining mask to accumColor.
             accumColor = accumColor + mask * bnce.emission;
 
-            // If sampling a light source, ignore further bounces and set accumulated color
+            // If sampling a light source, ignore further bounces
             if (bnce.emission.x > 0.0) {
-                //accumColor = accumColor + mask * bnce.color; // original just used emission here.
+
+                // direct sampling of a light source
+                if (x == 0) {
+                    accumColor = bnce.color;// original just used emission here.
+                }
                 break;
             }
 
-            // HERE - iterate over all light sources in the scene, accumulate light from all, updating accumColor
-            //nextEventEstimation(objects, numObjects, groups, triangles, &bnce, fgi, fgi2, n, mask, x, &accumColor);
+
+            // Here is the next event estimation experiment:  iterate over all light sources in the scene, accumulate light
+            // from all, updating accumColor. Works well for diffuse materials, but not for reflections/refraction.
+            // nextEventEstimation(objects, numObjects, groups, triangles, &bnce, fgi, fgi2, n, mask, x, &accumColor);
 
             // Update the mask by multiplying it with the hit object's color
             mask *= bnce.color;
 
             // perform cosine-weighted importance sampling by multiplying the mask
-            // with the cosine
+            // with the cosine. Note to self: For refracting/reflection, we set cos to 1.0.
             mask *= bnce.cos;
         }
 

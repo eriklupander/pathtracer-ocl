@@ -131,7 +131,9 @@ func (s *Triangle) Barycentric(p geom.Tuple4, u *float64, v *float64, w *float64
 func (s *Triangle) ID() int64 {
 	return -1
 }
-
+func (s *Triangle) Lbl() string {
+	return s.Label
+}
 func (s *Triangle) GetTransform() geom.Mat4x4 {
 	return geom.IdentityMatrix
 }

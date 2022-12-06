@@ -36,7 +36,9 @@ type Sphere struct {
 func (s *Sphere) ID() int64 {
 	return s.Id
 }
-
+func (s *Sphere) Lbl() string {
+	return s.Label
+}
 func (s *Sphere) GetParent() Shape {
 	return s.parent
 }

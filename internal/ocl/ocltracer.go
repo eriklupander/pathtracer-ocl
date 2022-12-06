@@ -46,8 +46,8 @@ type CLObject struct {
 	IsTexturedNM     bool       // 1 byte
 	TextureIndexNM   uint8      // 1 byte
 	IsEnvMap         bool       // 1 byte
-
-	Padding5 [175]byte
+	Label            [8]byte
+	Padding5         [167]byte
 }
 
 type CLGroup struct {
@@ -97,7 +97,7 @@ type CLCamera struct {
 
 // Trace is the entry point for transforming input data into their OpenCL representations, setting up boilerplate
 // and calling the entry kernel. Should return a slice of float64 RGBA RGBA RGBA once finished.
-func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceIndex, height, samples int, camera CLCamera, textures []image.Image, sphereTextures []image.Image, cubeTextures []image.Image) []float64 {
+func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceIndex, samples int, camera CLCamera, textures []image.Image, sphereTextures []image.Image, cubeTextures []image.Image) []float64 {
 	numPixels := int(camera.Width * camera.Height)
 	logrus.Infof("trace with %d objects %dx%d", len(objects), camera.Width, camera.Height)
 
@@ -182,32 +182,6 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	cubeTexturesArrayMemObj := prepareTextures(context, cubeTextures)
 	defer cubeTexturesArrayMemObj.Release()
 
-	//// Prepare sphere textures
-	//var sphereTexturesMemObj *cl.MemObject
-	//if len(sphereTextures) > 0 {
-	//	format := cl.ImageFormat{ChannelOrder: cl.ChannelOrderRGBA, ChannelDataType: cl.ChannelDataTypeUNormInt8}
-	//	desc := cl.ImageDescription{
-	//		Type:       cl.MemObjectTypeImage2DArray,
-	//		Width:      sphereTextures[0].Bounds().Dx(),
-	//		Height:     sphereTextures[0].Bounds().Dy(),
-	//		RowPitch:   sphereTextures[0].(*image.NRGBA).Stride,
-	//		SlicePitch: len(sphereTextures[0].(*image.NRGBA).Pix),
-	//		ArraySize:  len(sphereTextures),
-	//	}
-	//	allImages := make([]byte, 0)
-	//	for _, v := range sphereTextures {
-	//		allImages = append(allImages, v.(*image.NRGBA).Pix...)
-	//	}
-	//	sphereTexturesMemObj, err = context.CreateImage(cl.MemReadOnly|cl.MemCopyHostPtr, format, desc, allImages)
-	//	if err != nil {
-	//		logrus.Fatalf("error creating sphereTextures: %v", err)
-	//	}
-	//	defer sphereTexturesMemObj.Release()
-	//} else {
-	//	fakeImage := image.NewNRGBA(image.Rect(0, 0, 1024, 1024))
-	//	sphereTexturesMemObj, _ = context.CreateImageFromImage(cl.MemReadOnly|cl.MemCopyHostPtr, fakeImage)
-	//}
-
 	// 4. Some kind of error-check where we make sure the parameters passed are supported?
 	for i := 0; i < 4; i++ {
 		_, err := kernel.ArgName(i)
@@ -242,10 +216,10 @@ func Trace(objects []CLObject, triangles []CLTriangle, groups []CLGroup, deviceI
 	if batchSize > numPixels {
 		batchSize = numPixels
 	}
-	for y := 0; y < height; y += batchSize {
+	for y := 0; int32(y) < camera.Height; y += batchSize {
 		st := time.Now()
 		results = append(results, computeBatch(objects, triangles, groups, camera, context, kernel, queue, samples, workGroupSize, y, batchSize, texturesArrayMemObj, sphereTexturesArrayMemObj, cubeTexturesArrayMemObj)...)
-		logrus.Infof("%d/%d lines done in %v", y+batchSize, height, time.Since(st))
+		logrus.Infof("%d/%d lines done in %v", y+batchSize, camera.Height, time.Since(st))
 	}
 
 	return results

@@ -37,7 +37,7 @@ func NewDiffuse(r, g, b float64) Material {
 }
 func NewGlass() Material {
 	return Material{
-		Color:           geom.Tuple4{0, 0, 0},
+		Color:           geom.Tuple4{1, 1, 1},
 		Emission:        geom.Tuple4{0, 0, 0},
 		RefractiveIndex: 1.52,
 		Reflectivity:    0.1,

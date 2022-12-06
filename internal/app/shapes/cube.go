@@ -30,7 +30,9 @@ type Cube struct {
 func (c *Cube) ID() int64 {
 	return c.Id
 }
-
+func (c *Cube) Lbl() string {
+	return c.Label
+}
 func (c *Cube) GetTransform() geom.Mat4x4 {
 	return c.Transform
 }

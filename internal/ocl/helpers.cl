@@ -1,4 +1,96 @@
+// THIS OpenCL code is NOT currently in use!!
 
+
+inline uint8 FaceFromPoint(double4 point) {
+
+	double absX = fabs(point.x);
+	double  absY = fabs(point.y);
+	double absZ = fabs(point.z);
+	double coord = maxX(absX, absY, absZ);
+
+	if (coord == point.x) {
+		return 0; // right
+	}
+	if (coord == -point.x) {
+		return 1; //"left"
+	}
+	if (coord == point.y) {
+		return 2; //"up"
+	}
+	if (coord == -point.y) {
+		return 3; //"down"
+	}
+	if (coord == point.z) {
+		return 4; // "front"
+	}
+	return 5; //"back"
+}
+
+
+inline double2 cubeUVFront(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVBack(double4 point) {
+	double u = fmod(1.0-point.x, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVLeft(double4 point) {
+	double u = fmod(point.z+1.0, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVRight(double4 point) {
+	double u = fmod(1.0-point.z, 2) / 2.0;
+	double v = fmod(point.y+1.0, 2) / 2.0;
+	printf("cube uv right: %f %f\n", u, v);
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVTop(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(1.0-point.z, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+inline double2 cubeUVBottom(double4 point) {
+	double u = fmod(point.x+1.0, 2) / 2.0;
+	double v = fmod(point.z+1.0, 2) / 2.0;
+	double2 uv = (double2)(u, v);
+	return uv;
+}
+
+// cubeUVCross returns uv coordinates given a "cross"-shaped cubemap texture
+inline double2 cubeUVCross(double4 point) {
+
+	double absX = fabs(point[0]);
+	double absY = fabs(point[1]);
+	double absZ = fabs(point[2]);
+	double coord = maxX(absX, absY, absZ);
+
+	if (coord == point[0]) {
+		return cubeUVRight(point); // right
+	}
+	if (coord == -point[0]) {
+	     return cubeUVLeft(point); //"left"
+	}
+	if (coord == point[1]) {
+		return cubeUVTop(point); //"up"
+	}
+	if (coord == -point[1]) {
+		return cubeUVBottom(point); //"down"
+	}
+	if (coord == point[2]) {
+	  	return cubeUVFront(point); // "front"
+	}
+
+	return cubeUVBack(point); //"back"
+}
 // findFirstIntersectionCloserThan returns true if an intersection is found that's closer than minT and which is not
 // ignoreIndex. This function is very similar to findClosestIntersection and should be refactored into something more
 // common. However, the triangle intersection code is somewhat tricky to generalize.

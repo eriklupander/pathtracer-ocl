@@ -15,7 +15,11 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 
 	objs := make([]CLObject, 0)
 	for i := range in {
+		lbl := [8]byte{0, 0, 0, 0, 0, 0, 0, 0}
+		copy(lbl[:], in[i].Lbl())
+
 		obj := CLObject{}
+		obj.Label = lbl
 		obj.Transform = in[i].GetTransform()
 		obj.Inverse = in[i].GetInverse()
 		obj.InverseTranspose = in[i].GetInverseTranspose()
@@ -74,7 +78,7 @@ func BuildSceneBufferCL(in []shapes.Shape) ([]CLObject, []CLTriangle, []CLGroup)
 		obj.Reflectivity = in[i].GetMaterial().Reflectivity
 
 		// finally, pad!
-		obj.Padding5 = [175]byte{}
+		obj.Padding5 = [167]byte{}
 
 		objs = append(objs, obj)
 	}

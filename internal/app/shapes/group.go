@@ -52,6 +52,10 @@ func (g *Group) ID() int64 {
 	return g.Id
 }
 
+func (g *Group) Lbl() string {
+	return g.Label
+}
+
 func (g *Group) GetTransform() geom.Mat4x4 {
 	return g.Transform
 }

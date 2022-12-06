@@ -51,7 +51,9 @@ type Cylinder struct {
 func (c *Cylinder) ID() int64 {
 	return c.Id
 }
-
+func (c *Cylinder) Lbl() string {
+	return c.Label
+}
 func (c *Cylinder) GetTransform() geom.Mat4x4 {
 	return c.Transform
 }

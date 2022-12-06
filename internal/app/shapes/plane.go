@@ -35,6 +35,9 @@ type Plane struct {
 func (p *Plane) ID() int64 {
 	return p.Id
 }
+func (p *Plane) Lbl() string {
+	return p.Label
+}
 func (p *Plane) GetTransform() geom.Mat4x4 {
 	return p.Transform
 }

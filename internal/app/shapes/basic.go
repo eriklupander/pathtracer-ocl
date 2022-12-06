@@ -7,6 +7,7 @@ import (
 
 type Shape interface {
 	ID() int64
+	Lbl() string
 	GetTransform() geom.Mat4x4
 	GetInverse() geom.Mat4x4
 	GetInverseTranspose() geom.Mat4x4
@@ -19,6 +20,7 @@ type Shape interface {
 
 type Basic struct {
 	Id               int64
+	Label            string
 	Transform        geom.Mat4x4
 	Inverse          geom.Mat4x4
 	InverseTranspose geom.Mat4x4
