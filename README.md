@@ -1,6 +1,6 @@
 # pathtracer-ocl
 Path tracer written in Go and OpenCL
-![example](images/gopher-in-a-corner.png)
+![example](images/fixed-refraction-and-reflection.png)![example2](images/gopher-in-a-corner.png)![example3](images/planets.png)
 _(2048 samples)_
 
 ## Description
@@ -8,11 +8,13 @@ Simple unidirectional pathtracer written just for fun using Go as frontend and O
 
 Supports:
 * Spheres, Planes, Boxes, Cylinders, Plain triangles
-* Diffuse and reflective materials
+* Diffuse, refractive and reflective materials
 * Movable camera
 * Anti-aliasing
 * Depth of Field with simple focal length and camera aperture.
 * .OBJ model loading and rendering with BVH support, incl computing vertex normals.
+* Texture-mapped planes, spheres and cubes.
+* Textured environment spheres and cubes
 
 Based on or inspired by:
 
