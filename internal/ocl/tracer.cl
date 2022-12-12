@@ -1,5 +1,6 @@
 __constant double PI = 3.14159265359f;
-__constant unsigned int MAX_BOUNCES = 6;
+__constant unsigned int MAX_EFFECTIVE_BOUNCES = 4;
+__constant unsigned int MAX_BOUNCES = 10;
 __constant double EPSILON = 0.0001;
 
 typedef struct __attribute__((packed)) tag_camera {
@@ -853,6 +854,15 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
     unsigned int x = i % cam->width;
     unsigned int y = yOffset + i / cam->width;
 
+// Comment in to debug a single pixel
+//    if (x != 428 || y != 558) {
+//        output[i * 4] = 1.0;
+//        output[i * 4 + 1] = 1.0;
+//        output[i * 4 + 2] = 1.0;
+//        output[i * 4 + 3] = 1.0;
+//        return;
+//    }
+
     __local double4 rayOrigin, rayDirection;
     for (unsigned int n = 0; n < samples; n++) {
         // For each sample, compute a new ray cast through the target (x,y) pixel with random offset within the pixel.
@@ -861,12 +871,17 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
         rayDirection = r.direction;
 
         unsigned int actualBounces = 0;
-        // Each ray may bounce up to 5 times
+        unsigned int effectiveBounces = 0;
+        // Each ray may bounce up to 16 times
         __local bounce bounces[16]; // = {};
         bool entering = false;
         bool inside = false;
         bool exiting = false;
-        for (unsigned int b = 0; b < MAX_BOUNCES; b++) {
+        bool reflecting = false;
+
+        // For each ray, allow up to MAX_BOUNCES bounces, with a cap of MAX_EFFECTIVE_BOUNCES since refraction
+        // does not "consume" a color-contributing "effective" bounce.
+        for (unsigned int b = 0; b < MAX_BOUNCES && effectiveBounces < MAX_EFFECTIVE_BOUNCES ; b++) {
 
             context ctx = {{0},{0},{0},{0},{0}};
             ixs = findClosestIntersection(objects, numObjects, groups, triangles, rayOrigin, rayDirection, &ctx);
@@ -960,17 +975,46 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                 double cosine = 1.0; // experiment: for reflected, always use 1.0
                 entering = false;
                 exiting = false;
+                reflecting = false;
                 double sch = 0.0;
-                if (obj.refractiveIndex != 1.0) {
+
+                // First, decide to refract or reflect depending on material properties.
+                if (obj.reflectivity != 0.0 && noise3D(fgi, n, b) < obj.reflectivity) {
+                    // reflect, even if transparent.
+                    // Reflected, calculate reflection vector and set as rayDirection
+                    double dotScalar = dot(rayDirection, normalVec);
+                    double4 norm = (normalVec * 2.0) * dotScalar;
+                    rayDirection = rayDirection - norm;
+                    reflecting = true;
+                }
+                 else if (obj.refractiveIndex == -1.0) {
+                    // Slightly hacky - a refractive index of -1.0 means we have a super-thin material that should be handled
+                    // as a "refraction without refraction", e.g. transparent but won't affect the ray direction.
+
+                      if (schlick(eyeVector, normalVec,  1.0, 1.5) < noise3D(fgi, n*n, b)) {
+                          // passing through, set underpoint
+                          overPoint = position - normalVec * EPSILON;
+                          // do not touch rayDirection
+                      } else {
+                          // reflected
+                          double dotScalar = dot(rayDirection, normalVec);
+                          double4 norm = (normalVec * 2.0) * dotScalar;
+                          rayDirection = rayDirection - norm;
+                          reflecting = true;
+                      }
+                }
+                // Consider removing this HACK for handling glass models without thickness.
+                else if (obj.refractiveIndex != 1.0) {
+                    // Handle "normal" refraction for solid objects
+
                     if (!inside) {
                         // if we have hit a refractive object and we're not inside one...
 
                         // compute schlick to determine chance of reflection
                         sch = schlick(eyeVector, normalVec,  1.0, obj.refractiveIndex);
                         double rnd = noise3D(fgi, n*n, b);
-                         if (x == 248 && y == 321) {
-                            printf("schlick was %f, chance was %f\n", sch, rnd);
-
+                         if (x == 428 && y == 591) {
+                            printf("NOT INSIDE: schlick was %f, chance was %f\n", sch, rnd);
                          }
                         if (sch < rnd) {
                             // refraction
@@ -984,10 +1028,14 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                             double dotScalar = dot(rayDirection, normalVec);
                             double4 norm = (normalVec * 2.0) * dotScalar;
                             rayDirection = rayDirection - norm;
+                            reflecting = true;
                         }
                     } else {
                         // If already inside, we are passing back into air but we may still reflect internally in the medium??
                          double sch = schlick(eyeVector, normalVec,  obj.refractiveIndex, 1.0);
+                         if (x == 378 && y == 558) {
+                             printf("IS INSIDE: schlick was %f\n", sch);
+                          }
                          if (sch < noise3D(fgi, n*n, b)) {
                             // refract back into air
                             rayDirection = computeRefractedRay(eyeVector, normalVec,  obj.refractiveIndex, 1.0);
@@ -1002,23 +1050,20 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                             rayDirection = rayDirection - norm;
                             entering = false;
                             exiting = false;
+                            reflecting = true;
                          }
                     }
-                } else if (obj.reflectivity == 0.0 || noise3D(fgi, n, b) > obj.reflectivity) {
+                } else {
                     // Diffuse
                     rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
                     // Calculate the cosine of the OUTGOING ray in relation to the surface
                     // normal.
                     cosine = dot(rayDirection, normalVec);
-                } else {
-                    // Reflected, calculate reflection vector and set as rayDirection
-                    double dotScalar = dot(rayDirection, normalVec);
-                    double4 norm = (normalVec * 2.0) * dotScalar;
-                    rayDirection = rayDirection - norm;
                 }
                 rayOrigin = overPoint;
 
-                if (x == 248 && y == 321) {
+                // 378 , 591
+                if (x == 428 && y == 558) {
                     printf("iteration: %d === intersected: %s === schlick: %f ===new origin: %f, %f, %f ==== direction: %f %f %f\n", b, obj.label,sch, rayOrigin.x, rayOrigin.y, rayOrigin.z, rayDirection.x, rayDirection.y, rayDirection.z);
                 }
 
@@ -1051,6 +1096,12 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                     bounces[b] = bnce;
                 }
 
+                // Only increment effective bounces for non-refractive/reflective materials
+                if (!entering && !exiting && !reflecting) {
+                    effectiveBounces++;
+                }
+
+                // increment total bounces.
                 actualBounces++;
 
                 // experiment - stop bouncing if intersecting a light source
@@ -1090,7 +1141,7 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
             // sixth run - sample the (point) light source on each bounce
 
             bounce bnce = bounces[x];
-            if (imageX == 248 && y == 321) {
+            if (imageX == 428 && y == 558) {
                 printf("bounce: %d === refraction: %d \n", x, bnce.isRefraction);
             }
 
@@ -1135,5 +1186,4 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
     output[i * 4 + 1] = colors.y * colorWeight;
     output[i * 4 + 2] = colors.z * colorWeight;
     output[i * 4 + 3] = 1.0;
-
 }

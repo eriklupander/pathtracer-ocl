@@ -5,7 +5,7 @@ import (
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/material"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/shapes"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -33,7 +33,7 @@ func ParseObj(data string) *Obj {
 			switch parts[0] {
 			case "mtllib":
 				fileName := parts[1]
-				matData, err := ioutil.ReadFile(fileName) // "./assets/models/" +
+				matData, err := os.ReadFile(fileName) // "./assets/models/" +
 				if err != nil {
 					panic(err.Error())
 				}
@@ -56,8 +56,9 @@ func ParseObj(data string) *Obj {
 				out.Normals = append(out.Normals, geom.NewVector(x, y, z))
 
 			case "f":
+				// 1/1/1 == vertex/texture/normal
 
-				if len(out.Normals) == 1 {
+				if !strings.Contains(row, "/") { // ONLY verticies
 					for i := 2; i < len(parts)-1; i++ {
 						idx1, _ := strconv.Atoi(parts[1])
 						idx2, _ := strconv.Atoi(parts[i])
@@ -75,13 +76,23 @@ func ParseObj(data string) *Obj {
 						subparts2 := strings.Split(parts[i], "/")
 						subparts3 := strings.Split(parts[i+1], "/")
 
+						// Vertices
 						idx1, _ := strconv.Atoi(subparts1[0])
 						idx2, _ := strconv.Atoi(subparts2[0])
 						idx3, _ := strconv.Atoi(subparts3[0])
 
-						normIdx1, _ := strconv.Atoi(subparts1[2])
-						normIdx2, _ := strconv.Atoi(subparts2[2])
-						normIdx3, _ := strconv.Atoi(subparts3[2])
+						// Future texture coordinates
+						_, _ = strconv.Atoi(subparts1[1])
+						_, _ = strconv.Atoi(subparts2[1])
+						_, _ = strconv.Atoi(subparts3[1])
+
+						// Normal
+						var normIdx1, normIdx2, normIdx3 int
+						if len(subparts1) == 3 {
+							normIdx1, _ = strconv.Atoi(subparts1[2])
+							normIdx2, _ = strconv.Atoi(subparts2[2])
+							normIdx3, _ = strconv.Atoi(subparts3[2])
+						}
 
 						tri := shapes.NewTriangle(
 							out.Verticies[idx1],

@@ -1,6 +1,7 @@
 package scenes
 
 import (
+	"fmt"
 	"github.com/eriklupander/pathtracer-ocl/cmd"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/camera"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
@@ -11,7 +12,7 @@ import (
 	"os"
 )
 
-func TransparentTeapotScene() func() *Scene {
+func GlassScene() func() *Scene {
 	return func() *Scene {
 
 		//cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
@@ -63,9 +64,9 @@ func TransparentTeapotScene() func() *Scene {
 		// left sphere
 		leftSphere := shapes.NewSphere()
 		leftSphere.Label = "left_spr"
-		leftSphere.SetTransform(geom.Translate(-0.25, -0.28, 0.25))
+		leftSphere.SetTransform(geom.Translate(-0.2, -0.28, 0.25))
 		leftSphere.SetTransform(geom.Scale(0.12, 0.12, 0.12))
-		leftSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
+		leftSphere.SetMaterial(material.NewMirror())
 
 		// right sphere
 		rightSphere := shapes.NewSphere()
@@ -76,23 +77,33 @@ func TransparentTeapotScene() func() *Scene {
 
 		// teapot model
 		mtrl := material.NewGlass()
-		mtrl.RefractiveIndex = -1.0
-		mtrl.Reflectivity = 0.2
-		teapot := teapot(mtrl)
-		teapot.Label = "teapot  "
+		mtrl.Reflectivity = 0.0
+		glassModel := glass(mtrl)
+		glassModel.Label = "glass   "
 
-		// lightsource
-		lightsource := shapes.NewSphere()
-		lightsource.Label = "light   "
-		lightsource.SetTransform(geom.Translate(0, .399, 0))
-		lightsource.SetTransform(geom.Scale(0.283, 0.01, 0.283))
+		// lightsources
+		lights := make([]shapes.Shape, 0)
+		for i := 0; i < 2; i++ {
+			for j := 0; j < 2; j++ {
+				light := shapes.NewCube()
+				light.Label = fmt.Sprintf("light %d-%d", i, j)
+				light.SetTransform(geom.Translate(-0.25+float64(i)*0.5, .4, -0.25+float64(j)*0.5))
+				light.SetTransform(geom.Scale(0.15, 0.001, 0.15))
+				light.SetMaterial(material.NewLightBulb())
+				light.Material.Emission = geom.NewColor(10, 10, 10)
+				light.Material.Color = geom.NewColor(1, 1, 1)
+				lights = append(lights, light)
+			}
+		}
 
-		light := material.NewLightBulb()
-		light.Emission = geom.NewColor(9, 9, 9)
-		//light.Color = geom.NewColor(0.9, 0.8, 0.8)
-		lightsource.SetMaterial(light)
+		// extra light (removed)
+		spotLight := shapes.NewSphere()
+		spotLight.SetTransform(geom.Translate(0.4, 0.2, -2.0))
+		spotLight.SetTransform(geom.Scale(0.2, 0.2, 0.2))
+		spotLight.SetMaterial(material.NewLightBulb())
 
-		shapes := []shapes.Shape{lightsource, floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, teapot}
+		shapes := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, frontWall, leftSphere, rightSphere, glassModel}
+		shapes = append(shapes, lights...)
 
 		return &Scene{
 			Camera:  cam,
@@ -101,8 +112,8 @@ func TransparentTeapotScene() func() *Scene {
 	}
 }
 
-func teapot(mtrl material.Material) *shapes.Group {
-	data, err := os.ReadFile("assets/teapot.obj")
+func glass(mtrl material.Material) *shapes.Group {
+	data, err := os.ReadFile("assets/glass.obj")
 	if err != nil {
 		panic(err.Error())
 	}
@@ -115,14 +126,20 @@ func teapot(mtrl material.Material) *shapes.Group {
 	for i := range group.Children[0].(*shapes.Group).Children {
 		tris = append(tris, group.Children[0].(*shapes.Group).Children[i].(*shapes.Triangle))
 	}
+	for i := range group.Children[1].(*shapes.Group).Children {
+		tris = append(tris, group.Children[1].(*shapes.Group).Children[i].(*shapes.Triangle))
+	}
 	obj.ComputeVertexNormals(tris)
 
 	group.Bounds()
-	group.SetTransform(geom.Translate(0, -0.38, -0.2))
-	group.SetTransform(geom.RotateY(math.Pi / 12))
-	group.SetTransform(geom.Scale(0.1, 0.1, 0.1))
+	fmt.Printf("completed bounds, first pass\n")
+	group.SetTransform(geom.Translate(-0.3, -0.395, -0.2))
+	group.SetTransform(geom.Scale(0.03, 0.03, 0.03))
 	group.SetMaterial(mtrl)
+	fmt.Printf("start divide...")
 	shapes.Divide(group, 50)
+	fmt.Printf("done!\n")
 	group.Bounds()
+	fmt.Printf("completed bounds, second pass\n")
 	return group
 }

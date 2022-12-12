@@ -19,6 +19,29 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+type scene struct {
+	name string
+	fn   func() *scenes.Scene
+}
+
+var sc = []scene{
+	{"reference", scenes.ReferenceScene()},
+	{"teapot", scenes.ModelScene()},
+	{"glass", scenes.GlassScene()},
+	{"gopher", scenes.GopherScene()},
+	{"gopher-window", scenes.GopherWindowScene()},
+	{"christian", scenes.ChristianScene()},
+	{"textures", scenes.TexturedPlanetsScene()},
+	{"envmap", scenes.EnvironmentMap()},
+	{"cubemap", scenes.EnvironmentCubeMap()},
+	{"reflection", scenes.ReflectionsScene()},
+	{"transparency", scenes.TransparencyScene()},
+	{"transparency_quad_lights", scenes.TransparencyQuadLightsScene()},
+	{"transparency_f_light", scenes.TransparencyFLightScene()},
+	{"transparent_teapot", scenes.TransparentTeapotScene()},
+	{"default", scenes.OCLScene()},
+}
+
 func main() {
 
 	var configFlags = pflag.NewFlagSet("config", pflag.ExitOnError)
@@ -30,6 +53,7 @@ func main() {
 	configFlags.String("scene", "gopher", "scene from /scenes")
 	configFlags.Int("device-index", 0, "Use device with index (use --list-devices to list available devices)")
 	configFlags.Bool("list-devices", false, "List available devices")
+	configFlags.Bool("list-scenes", false, "List available scenes")
 
 	if err := configFlags.Parse(os.Args[1:]); err != nil {
 		panic(err.Error())
@@ -45,36 +69,30 @@ func main() {
 		listDevices()
 		return
 	}
+	if cmd.Cfg.ListScenes {
+		listScenes()
+		return
+	}
 
 	var scene func() *scenes.Scene
-	switch cmd.Cfg.Scene {
-	case "reference":
-		scene = scenes.ReferenceScene()
-	case "teapot":
-		scene = scenes.ModelScene()
-	case "gopher":
-		scene = scenes.GopherScene()
-	case "gopher-window":
-		scene = scenes.GopherWindowScene()
-	case "christian":
-		scene = scenes.ChristianScene()
-	case "textures":
-		scene = scenes.TexturedPlanetsScene()
-	case "envmap":
-		scene = scenes.EnvironmentMap()
-	case "cubemap":
-		scene = scenes.EnvironmentCubeMap()
-	case "reflection":
-		scene = scenes.ReflectionsScene()
-	case "transparency":
-		scene = scenes.TransparencyScene()
-	case "transparent_teapot":
-		scene = scenes.TransparentTeapotScene()
-	default:
+	for _, s := range sc {
+		if s.name == cmd.Cfg.Scene {
+			scene = s.fn
+			break
+		}
+	}
+
+	if scene == nil {
 		scene = scenes.OCLScene()
 	}
 
 	tracer.Render(scene)
+}
+
+func listScenes() {
+	for _, s := range sc {
+		fmt.Println(s.name)
+	}
 }
 
 func listDevices() {

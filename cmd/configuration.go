@@ -11,6 +11,7 @@ type Config struct {
 	FocalLength float64
 	DeviceIndex int
 	ListDevices bool
+	ListScenes  bool
 	Scene       string
 }
 
@@ -25,6 +26,7 @@ func FromConfig() {
 		FocalLength: viper.GetFloat64("focal-length"),
 		DeviceIndex: viper.GetInt("device-index"),
 		ListDevices: viper.GetBool("list-devices"),
+		ListScenes:  viper.GetBool("list-scenes"),
 		Scene:       viper.GetString("scene"),
 	}
 }

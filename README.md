@@ -1,5 +1,7 @@
 # pathtracer-ocl
 Path tracer written in Go and OpenCL
+![example0](images/glass-quad-lights-2048-fixed-blackness.png)
+
 ![example](images/fixed-refraction-and-reflection.png)![example2](images/gopher-in-a-corner.png)![example3](images/planets.png)
 _(2048 samples)_
 

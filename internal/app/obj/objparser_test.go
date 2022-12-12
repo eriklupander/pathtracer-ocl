@@ -4,8 +4,8 @@ import (
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/shapes"
 	"github.com/stretchr/testify/assert"
-	"io/ioutil"
 	"math"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -220,10 +220,27 @@ illum 2
 
 func TestProcessModel(t *testing.T) {
 	// Model
-	bytes, err := ioutil.ReadFile("../../../assets/teapot.obj")
+	bytes, err := os.ReadFile("../../../assets/teapot.obj")
 	assert.NoError(t, err)
 
 	model := ParseObj(string(bytes)).ToGroup()
+	model.SetTransform(geom.Translate(0, 1.2, 0))
+	model.SetTransform(geom.RotateX(math.Pi / 2))
+	model.SetTransform(geom.RotateY(-math.Pi / 2))
+	model.SetTransform(geom.RotateX(-math.Pi / 8))
+	shapes.Divide(model, 100)
+	model.Bounds()
+}
+
+func TestProcessGlassModel(t *testing.T) {
+	// Model
+	bytes, err := os.ReadFile("../../../assets/glass.obj")
+	assert.NoError(t, err)
+
+	model := ParseObj(string(bytes)).ToGroup()
+	scndGrp := model.Children[1]
+	model.Children = []shapes.Shape{scndGrp}
+	model.Bounds()
 	model.SetTransform(geom.Translate(0, 1.2, 0))
 	model.SetTransform(geom.RotateX(math.Pi / 2))
 	model.SetTransform(geom.RotateY(-math.Pi / 2))

@@ -117,11 +117,3 @@ func Divide(s Shape, threshold int) {
 		// Do nothing
 	}
 }
-
-func remove(a []Shape, i int) []Shape {
-	// Remove the element at index i from a.
-	copy(a[i:], a[i+1:]) // Shift a[i+1:] left one index.
-	//a[len(a)-1] =      // Erase last element (write zero value).
-	a = a[:len(a)-1] // Truncate slice.
-	return a
-}

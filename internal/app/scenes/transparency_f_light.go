@@ -1,17 +1,16 @@
 package scenes
 
 import (
+	"fmt"
 	"github.com/eriklupander/pathtracer-ocl/cmd"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/camera"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/geom"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/material"
-	"github.com/eriklupander/pathtracer-ocl/internal/app/obj"
 	"github.com/eriklupander/pathtracer-ocl/internal/app/shapes"
 	"math"
-	"os"
 )
 
-func TransparentTeapotScene() func() *Scene {
+func TransparencyFLightScene() func() *Scene {
 	return func() *Scene {
 
 		//cam := camera.NewCamera(cmd.Cfg.Width, cmd.Cfg.Height, math.Pi/3, geom.NewPoint(0, 0.13, -0.9), geom.NewPoint(0, 0.02, -.1))
@@ -63,66 +62,52 @@ func TransparentTeapotScene() func() *Scene {
 		// left sphere
 		leftSphere := shapes.NewSphere()
 		leftSphere.Label = "left_spr"
-		leftSphere.SetTransform(geom.Translate(-0.25, -0.28, 0.25))
-		leftSphere.SetTransform(geom.Scale(0.12, 0.12, 0.12))
-		leftSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
+		leftSphere.SetTransform(geom.Translate(-0.25, -0.18, 0.25))
+		leftSphere.SetTransform(geom.Scale(0.14, 0.14, 0.14))
+		leftSphere.SetMaterial(material.NewGlass()) //material.NewDiffuse(0.9, 0.8, 0.7))
+
+		// middle sphere
+		middleSphere := shapes.NewSphere()
+		middleSphere.Label = "mddl_spr"
+		middleSphere.SetTransform(geom.Translate(0, -0.24, -0.30))
+		middleSphere.SetTransform(geom.Scale(0.16, 0.16, 0.16))
+		middleSphere.SetMaterial(material.NewDiffuse(0.9, 0.8, 0.7))
+		middleSphere.Material.RefractiveIndex = 1.57
 
 		// right sphere
 		rightSphere := shapes.NewSphere()
 		rightSphere.Label = "right_spr"
-		rightSphere.SetTransform(geom.Translate(0.25, -0.28, 0.25))
-		rightSphere.SetTransform(geom.Scale(0.12, 0.12, 0.12))
-		rightSphere.SetMaterial(material.NewGlass())
+		rightSphere.SetTransform(geom.Translate(0.35, -0.23, 0.2))
+		rightSphere.SetTransform(geom.Scale(0.17, 0.17, 0.17))
+		rightSphere.SetMaterial(material.NewMirror())
 
-		// teapot model
-		mtrl := material.NewGlass()
-		mtrl.RefractiveIndex = -1.0
-		mtrl.Reflectivity = 0.2
-		teapot := teapot(mtrl)
-		teapot.Label = "teapot  "
+		// lightsources
+		lghtMtl := material.NewLightBulb()
+		lghtMtl.Emission = geom.NewColor(9, 9, 9)
+		lghtMtl.Color = geom.NewColor(1, 1, 1)
+		// Use 3 cubes to create an F formed light
+		light := shapes.NewCube()
+		light.Label = fmt.Sprintf("light 1")
+		light.SetTransform(geom.Translate(-0.125, .3999, 0.05))
+		light.SetTransform(geom.Scale(0.05, 0.01, 0.45))
+		light.SetMaterial(lghtMtl)
 
-		// lightsource
-		lightsource := shapes.NewSphere()
-		lightsource.Label = "light   "
-		lightsource.SetTransform(geom.Translate(0, .399, 0))
-		lightsource.SetTransform(geom.Scale(0.283, 0.01, 0.283))
+		light2 := shapes.NewCube()
+		light2.Label = fmt.Sprintf("light top")
+		light2.SetTransform(geom.Translate(-0.02, .3999, -0.35))
+		light2.SetTransform(geom.Scale(0.075, 0.01, 0.05))
+		light2.SetMaterial(lghtMtl)
 
-		light := material.NewLightBulb()
-		light.Emission = geom.NewColor(9, 9, 9)
-		//light.Color = geom.NewColor(0.9, 0.8, 0.8)
-		lightsource.SetMaterial(light)
+		light3 := shapes.NewCube()
+		light3.Label = fmt.Sprintf("light middle")
+		light3.SetTransform(geom.Translate(-0.05, .3999, 0))
+		light3.SetTransform(geom.Scale(0.075, 0.01, 0.05))
+		light3.SetMaterial(lghtMtl)
 
-		shapes := []shapes.Shape{lightsource, floor, ceil, leftWall, rightWall, backWall, leftSphere, rightSphere, teapot}
-
+		shapes := []shapes.Shape{floor, ceil, leftWall, rightWall, backWall, leftSphere, middleSphere, rightSphere, light, light2, light3}
 		return &Scene{
 			Camera:  cam,
 			Objects: shapes,
 		}
 	}
-}
-
-func teapot(mtrl material.Material) *shapes.Group {
-	data, err := os.ReadFile("assets/teapot.obj")
-	if err != nil {
-		panic(err.Error())
-	}
-	model := obj.ParseObj(string(data))
-	group := model.ToGroup()
-
-	// iterate over all triangles _before_ doing BVH divide to compute vertex normals since the teapot
-	// model doesn't have pre-computed vertex models stored in the .obj file.
-	tris := make([]*shapes.Triangle, 0)
-	for i := range group.Children[0].(*shapes.Group).Children {
-		tris = append(tris, group.Children[0].(*shapes.Group).Children[i].(*shapes.Triangle))
-	}
-	obj.ComputeVertexNormals(tris)
-
-	group.Bounds()
-	group.SetTransform(geom.Translate(0, -0.38, -0.2))
-	group.SetTransform(geom.RotateY(math.Pi / 12))
-	group.SetTransform(geom.Scale(0.1, 0.1, 0.1))
-	group.SetMaterial(mtrl)
-	shapes.Divide(group, 50)
-	group.Bounds()
-	return group
 }
