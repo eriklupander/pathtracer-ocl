@@ -36,8 +36,9 @@ A few command-line args have been added to simplify testing things.
       --focal-length float   Focal length. Default: 0
       --device-index int     Use OpenCL device with index (use --list-devices to list available devices)
       --list-devices         List available OpenCL devices
+      --list-scenes          List available scenes
 ```
-Suggested values for focal length and aperture for the standard cornell box: 1.6 and 0.1
+Suggested values for focal length and aperture (if you want Depth of Field) for the standard Cornell box: 1.6 and 0.1.
 
 Example:
 ```shell
@@ -93,13 +94,13 @@ The king is unsurprisingly enough the GeForce RTX 2080 on my Desktop PC, which i
 1280x960, 2048 samples.
 
 #### Teapot
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: 57m
-NVIDIA GeForce RTX 2080, 256 wgsize: 47m
-NVIDIA GeForce RTX 2080, 256 wgsize all lines in a single chunk: 29m20s. (Also, a few other optimizations had been done, especially regarding bounding box intersection testing)
+* Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: 57m
+* NVIDIA GeForce RTX 2080, 256 wgsize: 47m
+* NVIDIA GeForce RTX 2080, 256 wgsize all lines in a single chunk: 29m20s. (Also, a few other optimizations had been done, especially regarding bounding box intersection testing)
 
 #### Gopher
-Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: ??? 
-NVIDIA GeForce RTX 2080: 47m
+* Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz: ??? 
+* NVIDIA GeForce RTX 2080: 47m
 
 Clearly, the GPU underperforms enormously with 3D model rendering. Gopher is about 16000 triangles, Teapot 6500 triangles. Both use BVH trees with semi-optimized group sizes.
 
