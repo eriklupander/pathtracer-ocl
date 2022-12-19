@@ -986,8 +986,7 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                     double4 norm = (normalVec * 2.0) * dotScalar;
                     rayDirection = rayDirection - norm;
                     reflecting = true;
-                }
-                 else if (obj.refractiveIndex == -1.0) {
+                } else if (obj.refractiveIndex == -1.0) {
                     // Slightly hacky - a refractive index of -1.0 means we have a super-thin material that should be handled
                     // as a "refraction without refraction", e.g. transparent but won't affect the ray direction.
 
