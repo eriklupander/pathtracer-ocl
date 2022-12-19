@@ -872,12 +872,14 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
 
         unsigned int actualBounces = 0;
         unsigned int effectiveBounces = 0;
-        // Each ray may bounce up to 16 times
-        __local bounce bounces[16]; // = {};
+
         bool entering = false;
         bool inside = false;
         bool exiting = false;
         bool reflecting = false;
+
+        double4 accumColor = (double4)(0.0, 0.0, 0.0, 0.0);
+        double4 mask = (double4)(1.0, 1.0, 1.0, 1.0);
 
         // For each ray, allow up to MAX_BOUNCES bounces, with a cap of MAX_EFFECTIVE_BOUNCES since refraction
         // does not "consume" a color-contributing "effective" bounce.
@@ -953,9 +955,6 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                 double4 normalVec = mul(obj.inverseTranspose, objectNormal);
                 normalVec.w = 0.0; // set w to 0
                 normalVec = normalize(normalVec);
-
-                // The "inside" stuff from the old impl will be needed for refraction
-                // later comps.Inside = false
 
                 // negate the normal if the normal if facing
                 // away from the "eye"
@@ -1056,6 +1055,7 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                 } else {
                     // Diffuse
                     rayDirection = randomVectorInHemisphere(normalVec, fgi, b, n);
+
                     // Calculate the cosine of the OUTGOING ray in relation to the surface
                     // normal.
                     cosine = dot(rayDirection, normalVec);
@@ -1067,113 +1067,67 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                     printf("iteration: %d === intersected: %s === schlick: %f ===new origin: %f, %f, %f ==== direction: %f %f %f\n", b, obj.label,sch, rayOrigin.x, rayOrigin.y, rayOrigin.z, rayDirection.x, rayDirection.y, rayDirection.z);
                 }
 
-                // Finish this iteration by storing the bounce. Objects (with triangles) gets special treatment
-                // since a model may have many different materials. See xsTriangleColor
-                if (obj.type == 4) {
-                    bounce bnce = {position, cosine, ctx.xsTriangleColor[ixs.normalIndex], ctx.xsTriangleEmission[ixs.normalIndex], normalVec, 1.0, entering || exiting};
-                    bounces[b] = bnce;
-                } else {
-                    // texture experiment for PLANE, CUBE and SPHERE
-                    double4 color = obj.color;
+                // NEW 2022-12-19: Instead of storing bounce info, compute color directly
+                double4 objColor;
+                double4 objEmission;
+                if (obj.type != 4) {
+                    // if non mesh object...
                     if (obj.isTextured) {
+                          double4 localPoint = mul(obj.inverse, position);
                           if (obj.type == 0) { // PLANE
-                              double4 localPoint = mul(obj.inverse, position);
                               float4 rgba = read_imagef(image, sampler, (float4)(localPoint.x * obj.textureScaleX, localPoint.z * obj.textureScaleY, obj.textureIndex, 0));
-                              color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                              objColor = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
                           } else if (obj.type == 1) { // SPHERE
-                              double4 localPoint = mul(obj.inverse, position);
                               double2 uv = sphericalMap(localPoint);
                               float4 rgba = read_imagef(sphereTextures, sampler, (float4)(uv.x, 1.0-uv.y, obj.textureIndex, 0));
-                              color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                              objColor = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
                           } else if (obj.type == 3) { // CUBE
-                              double4 localPoint = mul(obj.inverse, position);
                               double2 uv = cubeUV(localPoint);
                               float4 rgba = read_imagef(cubeMapTextures, sampler, (float4)(uv.x, uv.y, obj.textureIndex, 0));
-                              color = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
+                              objColor = (double4)(rgba.x, rgba.y, rgba.z, 1.0);
                           }
+                    } else {
+                        // Not textured, just use color on obj directly
+                         objColor = obj.color;
+                         objEmission = obj.emission;
                     }
-                    bounce bnce = {position, cosine, color, obj.emission, normalVec, 1.0, entering || exiting};
-                    bounces[b] = bnce;
+                } else {
+                    // If model with triangles... (no support for textured models yet)
+                    objColor = ctx.xsTriangleColor[ixs.normalIndex];
+                    objEmission = ctx.xsTriangleEmission[ixs.normalIndex];
                 }
 
-                // Only increment effective bounces for non-refractive/reflective materials
-                if (!entering && !exiting && !reflecting) {
+                // Start computing the color of this intersection
+                if (!entering && !exiting) {
+                    // do not modify neither mask or accumColor for refracting hits
+                    // add "strength" multiplied by remaining mask to accumColor.
+                    accumColor = accumColor + mask * objEmission;
+                    if (objEmission.x > 0.0) {
+
+                        // direct sampling of a light source
+                        if (effectiveBounces == 0) {
+                            accumColor = objColor;
+                        }
+                        break;
+                    }
+
+                    // Update the mask by multiplying it with the hit object's color
+                    mask *= objColor;
+
+                    // perform cosine-weighted importance sampling by multiplying the mask
+                    // with the cosine. Note to self: For refracting/reflection, we set cos to 1.0.
+                    mask *= cosine;
                     effectiveBounces++;
                 }
 
                 // increment total bounces.
                 actualBounces++;
 
-                // experiment - stop bouncing if intersecting a light source
-                if (obj.emission.x > 0.0) {
+                // stop bouncing if intersecting a light source
+                if (objEmission.x > 0.0) {
                     break;
                 }
             }
-        }
-
-        // ------------------------------------ //
-        // Calculate final color using bounces! //
-        // ------------------------------------ //
-        double4 accumColor = (double4)(0.0, 0.0, 0.0, 0.0);
-        double4 mask = (double4)(1.0, 1.0, 1.0, 1.0);
-        unsigned int imageX = x;
-        for (unsigned int x = 0; x < actualBounces; x++) {
-
-            // first run - just use the material color of the first bounce
-            //accumColor = bounces[x].color;
-            //break;
-
-            // second run - as above, but use cos for the OUTGOING ray from the object's normal.
-            // this gives a slightly noisy result since the outgoing ray is random.
-            //accumColor = bounces[x].color * bounces[x].cos;
-            //break;
-
-            // third run - we actually use the cos of the _incoming_ ray instead
-            //accumColor = bounces[x].color * bounces[x].inCosine;
-            //break;
-
-            // fourth run - just add all FLAT colors together and average them
-            //accumColor += bounces[x].color / actualBounces;
-
-            // fifth run - just add colors together multiplied by OUT ray and average them
-            //accumColor += bounces[x].color*bounces[x].inCosine / actualBounces;
-
-            // sixth run - sample the (point) light source on each bounce
-
-            bounce bnce = bounces[x];
-            if (imageX == 428 && y == 558) {
-                printf("bounce: %d === refraction: %d \n", x, bnce.isRefraction);
-            }
-
-            // when refracting, simply pass updating color, mask etc for this bounce.
-            if (bnce.isRefraction) {
-                continue;
-            }
-
-            // add "strength" multiplied by remaining mask to accumColor.
-            accumColor = accumColor + mask * bnce.emission;
-
-            // If sampling a light source, ignore further bounces
-            if (bnce.emission.x > 0.0) {
-
-                // direct sampling of a light source
-                if (x == 0) {
-                    accumColor = bnce.color;// original just used emission here.
-                }
-                break;
-            }
-
-
-            // Here is the next event estimation experiment:  iterate over all light sources in the scene, accumulate light
-            // from all, updating accumColor. Works well for diffuse materials, but not for reflections/refraction.
-            // nextEventEstimation(objects, numObjects, groups, triangles, &bnce, fgi, fgi2, n, mask, x, &accumColor);
-
-            // Update the mask by multiplying it with the hit object's color
-            mask *= bnce.color;
-
-            // perform cosine-weighted importance sampling by multiplying the mask
-            // with the cosine. Note to self: For refracting/reflection, we set cos to 1.0.
-            mask *= bnce.cos;
         }
 
         // Finish this "sample" by adding the accumulated color to the total
