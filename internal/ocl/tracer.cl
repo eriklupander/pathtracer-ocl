@@ -1,4 +1,5 @@
 __constant double PI = 3.14159265359f;
+__constant double PI_X2 = 6.28318530718f;
 __constant unsigned int MAX_EFFECTIVE_BOUNCES = 4;
 __constant unsigned int MAX_BOUNCES = 10;
 __constant double EPSILON = 0.0001;
@@ -335,6 +336,17 @@ inline double4 randomPointOnSphere(double r, double u1, double u2) {
     return out;
 }
 
+inline double4 randomSphereDirection(double x, double y, double z) {
+    double rnd1 = noise3D(y, z, x);
+    double rnd2 = noise3D(x, y, z);
+    double2 h = double2(rnd1, rnd2) * double2(2.0, PI_X2) - double2(1.0, 0.0);
+    float phi = h.y;
+
+    // vec3(sqrt(1.-h.x*h.x)*vec2(sin(phi),cos(phi)),h.x);
+    double2 tmp = sqrt(1.0 - h.x * h.x) * double2(sin(phi), cos(phi));
+	return double4(tmp.x, tmp.y, h.x, 0.0);
+}
+
 // randomVectorInHemisphere is based on
 // https://raytracey.blogspot.com/2016/11/opencl-path-tracing-tutorial-2-path.html
 //
@@ -360,8 +372,7 @@ inline double4 randomVectorInHemisphere(double4 normalVec, double x, double y, d
     double4 u = normalize(cross(axis, normalVec));
     double4 v = cross(normalVec, u);
 
-    /* use the coordinate frame and random numbers to compute the next ray
-     * direction */
+    // use the coordinate frame and random numbers to compute the next ray direction
     return u * cos(rand1) * rand2s + v * sin(rand1) * rand2s + normalVec * sqrt(1.0 - rand2);
 }
 
@@ -824,6 +835,59 @@ inline void nextEventEstimation(__local object *objects, unsigned int numObjects
     }
 }
 
+// From OpenGL bi-directional path tracer https://www.shadertoy.com/view/MtfGR4, for inspiration on
+// how to build the light path.
+void constructLightPath(inout float seed) {
+    // start by creating a ray origin in unit space where x,y,z is between -0.5 to 0.5
+    vec3 rayOrigin = normalize( hash3(seed)-vec3(0.5) );
+
+    // next, generate a random ray in a hemisphere, probably in the hemisphere as defined by the
+    // vector from 0,0,0 -> rayOrigin.xyz
+    vec3 rayDirection = randomHemisphereDirection( rayOrigin, seed );
+
+    // Move the ray origin into world coordinates, (where the light bulb is)
+    // and modify its location by "half" its local space???
+    rayOrigin = lightSphere.xyz + rayOrigin*0.5;
+    vec3 color = LIGHTCOLOR;
+
+    // Init first light path node
+    lpNodes[0].position = rayOrigin;
+    lpNodes[0].color = color;
+    lpNodes[0].normal = rayDirection;
+
+    // initialize each node in the expected path with 0,0,0 for position, color (black) and normal.
+    for( int i=1; i<LIGHTPATHLENGTH; ++i ) {
+        lpNodes[i].position = lpNodes[i].color = lpNodes[i].normal = vec3(0.);
+    }
+
+    // Start building the light path
+    for( int i=1; i<LIGHTPATHLENGTH; i++ ) {
+		vec3 normal;
+
+		// Intersect world objects with the ray. Note that res.x == t (distance from origin to intersection)
+		// y is a "material index" that translates to a fixed color used in the scene for each primitive object.
+        vec2 res = intersect( rayOrigin, rayDirection, normal );
+
+        // ugly hack to never intersect the light source (it has material index=4)
+        if( res.y > -0.5 && res.y < 4. ) {
+            // set new rayOrigin using good ol' last origin + distance along direction vector.
+            rayOrigin = rayOrigin + rayDirection*res.x;
+
+            // get intersected object color.
+            // Note that color starts with LIGHTCOLOR (16.86, 10.76, 8.2)*1.3
+            // and is multiplied here, so "color" seems to be a bit like a mask where each path along the light ray will
+            // get less light contribution.
+            color *= calcColor( res.y );
+            lpNodes[i].position = rayOrigin;  // at next (starts at 1) store position, color and normal.
+            lpNodes[i].color = color;
+            lpNodes[i].normal = normal; // note that the value of normal was populated in the interection code
+
+            // continue by picking a new rayDirection in the hemisphere of the new normal.
+            rayDirection = cosWeightedRandomHemisphereDirection( normal, seed );
+        } else break;
+    }
+}
+
 // the sampler is used to "pick" colors from textures using normalized (e.g. floating point) coordinates where
 // CLK_ADDRESS_REPEAT makes sure that we don't get "mirrored" textures when crossing the 1.0 or 0.0 boundaries.
 __constant sampler_t sampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_LINEAR;
@@ -847,6 +911,85 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
     for (unsigned int a = 0;a < numObjects;a++) {
         objects[a] = global_objects[a];
     }
+
+    // START BI-DIRECTIONAL EXPERIMENT!
+    // 1. Pick a random outgoing ray from the sphere light source. In the future, perhaps we should
+    //    limit so we only emit light rays in useful directions... For now, the light is fully inside the cornell box.
+
+    // 2. Follow the ray around the scene, record position, obj color, cosine, normal.
+
+    // 3. Then cast a ray from the camera, and let it (likewise) bounce around.
+
+    // 4. Finally, iterate over the _camera_ rays, and for each bounce (not origin), cast a shadow ray
+    //    to each (including point on light light source) vertex on the light ray.
+
+    // 4.1 For each shadow ray that intersects a light vertex, accumulate color and emission. HOW?!?!
+
+    // 4.2 Continue doing this for each path on the camera ray.
+    // 4.3 Finally, we should be able to sum together all collected color and emission, weighed by the usual
+    //     cosine stuff and get a much better result than naive path tracing.
+    //     Compared to next-event estimation, that only cast a shadow ray to a random point on each light source,
+    //     BPT should be able to accumulate emission from several verticies on the light path.
+    double lightScale = 0.15;
+    double4 lightPos = (double4)(objects[0].transform[3], objects[0].transform[7], objects[0].transform[11], 1.0);
+
+    // start by creating a ray origin in world space at random point on spherical light source
+    double4 rpos = randomPointOnSphere(1.0, noise3D(fgi, fgi*fgi2, fgi2), noise3D(fg2, fgi, fgi*fgi*1.4324);
+    double4 rayOrigin = lightPos + (rpos * lightScale);
+
+    // then compute the resulting random ray direction, with rayOrigin adjusted to be an overpoint to
+    // avoid self-intersection
+    double4 rayDirection = normalize(lightPos - rayOrigin);
+    rayOrigin = rayOrigin + rayDirection*EPSILON; // overpoint
+
+    //    vec3 color = LIGHTCOLOR;
+
+    // allow up to 16 verticies on the light path
+    __local bounce lpNodes[16]; // = {};
+    lpNodes[0] = {rayOrigin, 1.0, normalize(rayDirection), objects[0].emission, normalize(rayDirection), 1.0, false};
+
+    // Init first light path node
+//    lpNodes[0].position = rayOrigin;
+//    lpNodes[0].color = color;
+//    lpNodes[0].normal = rayDirection;
+
+    // initialize each node in the expected path with 0,0,0 for position, color (black) and normal.
+//    for( int i=1; i<LIGHTPATHLENGTH; ++i ) {
+//        lpNodes[i].position = lpNodes[i].color = lpNodes[i].normal = vec3(0.);
+//    }
+    unsigned int LIGHTPATHLENGTH = 6;
+    // Start building the light path
+    for( unsigned int i=1; i<LIGHTPATHLENGTH; i++ ) {
+        vec3 normal;
+
+        // Intersect world objects with the ray. Note that res.x == t (distance from origin to intersection)
+        // y is a "material index" that translates to a fixed color used in the scene for each primitive object.
+        vec2 res = intersect( rayOrigin, rayDirection, normal );
+
+        // ugly hack to never intersect the light source (it has material index=4)
+        if( res.y > -0.5 && res.y < 4. ) {
+            // set new rayOrigin using good ol' last origin + distance along direction vector.
+            rayOrigin = rayOrigin + rayDirection*res.x;
+
+            // get intersected object color.
+            // Note that color starts with LIGHTCOLOR (16.86, 10.76, 8.2)*1.3
+            // and is multiplied here, so "color" seems to be a bit like a mask where each path along the light ray will
+            // get less light contribution.
+            color *= calcColor( res.y );
+            lpNodes[i].position = rayOrigin;  // at next (starts at 1) store position, color and normal.
+            lpNodes[i].color = color;
+            lpNodes[i].normal = normal; // note that the value of normal was populated in the interection code
+
+            // continue by picking a new rayDirection in the hemisphere of the new normal.
+            rayDirection = cosWeightedRandomHemisphereDirection( normal, seed );
+        } else break;
+    }
+
+
+
+
+    // END LIGHT PATH!
+
 
     __local intersection ixs;
 
@@ -953,9 +1096,6 @@ __kernel void trace(__constant object *global_objects, unsigned int numObjects, 
                 double4 normalVec = mul(obj.inverseTranspose, objectNormal);
                 normalVec.w = 0.0; // set w to 0
                 normalVec = normalize(normalVec);
-
-                // The "inside" stuff from the old impl will be needed for refraction
-                // later comps.Inside = false
 
                 // negate the normal if the normal if facing
                 // away from the "eye"

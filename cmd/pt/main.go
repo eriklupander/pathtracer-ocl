@@ -39,6 +39,7 @@ var sc = []scene{
 	{"transparency_quad_lights", scenes.TransparencyQuadLightsScene()},
 	{"transparency_f_light", scenes.TransparencyFLightScene()},
 	{"transparent_teapot", scenes.TransparentTeapotScene()},
+	{"bidirectional", scenes.BidirectionalScene()},
 	{"default", scenes.OCLScene()},
 }
 
